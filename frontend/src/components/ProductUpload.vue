@@ -6,7 +6,7 @@
       <input type="file" accept=".xlsx, .xls" @change="handleFileSelect" ref="fileInput" />
       <div class="upload-hint">
         <p>Select Excel file or drag and drop here</p>
-        <p class="format-hint">Columns: manage_code, manage_name, quantity, purchase_price, consumer_price, spec, supplier, location, barcode</p>
+        <p class="format-hint">Columns: 일련번호, 관리코드, 관리상품명, 인쇄상품명, 재고, 안전재고, 사입단가, 소비자가, 사입처, 위치, 바코드, 무게, 운임금액, 규격</p>
       </div>
     </div>
 
@@ -29,15 +29,20 @@
             <tr>
               <th>Row</th>
               <th>Status</th>
-              <th>Manage Code</th>
-              <th>Product Name</th>
-              <th>Qty</th>
-              <th>Purchase Price</th>
-              <th>Consumer Price</th>
-              <th>Spec</th>
-              <th>Supplier</th>
-              <th>Location</th>
-              <th>Barcode</th>
+              <th>일련번호</th>
+              <th>관리코드</th>
+              <th>관리상품명</th>
+              <th>인쇄상품명</th>
+              <th>재고</th>
+              <th>안전재고</th>
+              <th>사입단가</th>
+              <th>소비자가</th>
+              <th>사입처</th>
+              <th>위치</th>
+              <th>바코드</th>
+              <th>무게</th>
+              <th>운임금액</th>
+              <th>규격</th>
             </tr>
           </thead>
           <tbody>
@@ -47,15 +52,20 @@
                 <span v-if="row.errors?.length" class="error-badge">Error</span>
                 <span v-else class="success-badge">OK</span>
               </td>
+              <td>{{ row.serial_number }}</td>
               <td>{{ row.manage_code }}</td>
               <td>{{ row.manage_name }}</td>
+              <td>{{ row.print_name }}</td>
               <td>{{ row.quantity }}</td>
+              <td>{{ row.safety_quantity }}</td>
               <td>{{ row.purchase_price }}</td>
               <td>{{ row.consumer_price }}</td>
-              <td>{{ row.spec }}</td>
               <td>{{ row.supplier }}</td>
               <td>{{ row.location }}</td>
               <td>{{ row.barcode }}</td>
+              <td>{{ row.weight }}</td>
+              <td>{{ row.freight_amount }}</td>
+              <td>{{ row.spec }}</td>
             </tr>
           </tbody>
         </table>
@@ -106,20 +116,20 @@ function parseExcel(file) {
       .filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== ""))
       .map((row) => {
         const item = {
-          manage_code: getCellValue(row, headers, "manage_code") || getCellValue(row, headers, "Manage Code") || "",
-          manage_name: getCellValue(row, headers, "manage_name") || getCellValue(row, headers, "Product Name") || "",
-          print_name: getCellValue(row, headers, "print_name") || getCellValue(row, headers, "Print Name") || "",
-          quantity: Number(getCellValue(row, headers, "quantity")) || Number(getCellValue(row, headers, "Qty")) || 0,
-          safety_quantity: Number(getCellValue(row, headers, "safety_quantity")) || 0,
-          purchase_price: Number(getCellValue(row, headers, "purchase_price")) || Number(getCellValue(row, headers, "Purchase Price")) || 0,
-          consumer_price: Number(getCellValue(row, headers, "consumer_price")) || Number(getCellValue(row, headers, "Consumer Price")) || 0,
-          supplier: getCellValue(row, headers, "supplier") || getCellValue(row, headers, "Supplier") || "",
-          location: getCellValue(row, headers, "location") || getCellValue(row, headers, "Location") || "",
-          barcode: getCellValue(row, headers, "barcode") || "",
-          weight: getCellValue(row, headers, "weight") || "",
-          freight_amount: getCellValue(row, headers, "freight_amount") || "",
-          spec: getCellValue(row, headers, "spec") || getCellValue(row, headers, "Spec") || "",
-          serial_number: getCellValue(row, headers, "serial_number") ? Number(getCellValue(row, headers, "serial_number")) : null,
+          manage_code: getCellValue(row, headers, "관리코드") || getCellValue(row, headers, "manage_code") || getCellValue(row, headers, "Manage Code") || "",
+          manage_name: getCellValue(row, headers, "관리상품명") || getCellValue(row, headers, "manage_name") || getCellValue(row, headers, "Product Name") || "",
+          print_name: getCellValue(row, headers, "인쇄상품명") || getCellValue(row, headers, "print_name") || getCellValue(row, headers, "Print Name") || "",
+          quantity: Number(getCellValue(row, headers, "재고")) || Number(getCellValue(row, headers, "quantity")) || Number(getCellValue(row, headers, "Qty")) || 0,
+          safety_quantity: Number(getCellValue(row, headers, "안전재고")) || Number(getCellValue(row, headers, "safety_quantity")) || 0,
+          purchase_price: Number(getCellValue(row, headers, "사입단가")) || Number(getCellValue(row, headers, "purchase_price")) || Number(getCellValue(row, headers, "Purchase Price")) || 0,
+          consumer_price: Number(getCellValue(row, headers, "소비자가")) || Number(getCellValue(row, headers, "consumer_price")) || Number(getCellValue(row, headers, "Consumer Price")) || 0,
+          supplier: getCellValue(row, headers, "사입처") || getCellValue(row, headers, "supplier") || getCellValue(row, headers, "Supplier") || "",
+          location: getCellValue(row, headers, "위치") || getCellValue(row, headers, "location") || getCellValue(row, headers, "Location") || "",
+          barcode: getCellValue(row, headers, "바코드") || getCellValue(row, headers, "barcode") || "",
+          weight: getCellValue(row, headers, "무게") || getCellValue(row, headers, "weight") || "",
+          freight_amount: getCellValue(row, headers, "운임금액") || getCellValue(row, headers, "freight_amount") || "",
+          spec: getCellValue(row, headers, "규격") || getCellValue(row, headers, "spec") || getCellValue(row, headers, "Spec") || "",
+          serial_number: getCellValue(row, headers, "일련번호") ? Number(getCellValue(row, headers, "일련번호")) : (getCellValue(row, headers, "serial_number") ? Number(getCellValue(row, headers, "serial_number")) : null),
           errors: [],
         };
 
