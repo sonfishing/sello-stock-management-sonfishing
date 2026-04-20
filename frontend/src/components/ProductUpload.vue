@@ -177,26 +177,39 @@ async function uploadToSupabase() {
   if (hasErrors.value) return;
 
   isUploading.value = true;
-  const validData = previewData.value.filter((row) => !row.errors?.length);
+  const rowsWithErrors = previewData.value.filter((row) => row.errors?.length);
+  const rowsWithoutErrors = previewData.value.filter((row) => !row.errors?.length);
+
+  // Separate rows with and without serial_number
+  const rowsWithSerial = [];
+  const rowsWithoutSerial = [];
+  rowsWithoutErrors.forEach(row => {
+    const serial = row.serial_number;
+    if (serial !== null && serial !== undefined && serial !== '' && !isNaN(Number(serial))) {
+      rowsWithSerial.push(row);
+    } else {
+      rowsWithoutSerial.push(row);
+    }
+  });
 
   // Helper function to parse Korean date format
-function parseKoreanDate(dateStr) {
-  if (!dateStr) return null;
-  try {
-    // Handle Korean format: "2026-04-03 오전 11:54:54" or "2026-03-06 오후 10:59:17"
-    let cleanStr = String(dateStr).trim();
-    // Replace Korean AM/PM
-    cleanStr = cleanStr.replace('오전', 'AM').replace('오후', 'PM');
-    const date = new Date(cleanStr);
-    if (isNaN(date.getTime())) return null;
-    return date.toISOString();
-  } catch {
-    return null;
+  function parseKoreanDate(dateStr) {
+    if (!dateStr) return null;
+    try {
+      // Handle Korean format: "2026-04-03 오전 11:54:54" or "2026-03-06 오후 10:59:17"
+      let cleanStr = String(dateStr).trim();
+      // Replace Korean AM/PM
+      cleanStr = cleanStr.replace('오전', 'AM').replace('오후', 'PM');
+      const date = new Date(cleanStr);
+      if (isNaN(date.getTime())) return null;
+      return date.toISOString();
+    } catch {
+      return null;
+    }
   }
-}
 
-// Transform data to match Supabase schema (exclude 'errors' field)
-  const dataToInsert = validData.map(row => ({
+  // Transform data to match Supabase schema (exclude 'errors' field)
+  const transformRow = (row) => ({
     serial_number: row.serial_number,
     image_url: row.image_url,
     manage_code: row.manage_code,
@@ -217,14 +230,64 @@ function parseKoreanDate(dateStr) {
     is_hidden: row.is_hidden,
     registered_at: parseKoreanDate(row.registered_at),
     updated_at: parseKoreanDate(row.updated_at)
-  }));
+  });
+
+  let insertedCount = 0;
+  let updatedCount = 0;
+  let skippedCount = rowsWithoutSerial.length + rowsWithErrors.length;
 
   try {
-    const { data, error } = await supabase.from("products").insert(dataToInsert);
+    // Process rows with serial_number: upsert based on serial_number
+    for (const row of rowsWithSerial) {
+      const data = transformRow(row);
+      const serial = data.serial_number;
 
-    if (error) throw error;
+      // Check if product with this serial_number exists
+      const { data: existingData, error: checkError } = await supabase
+        .from("products")
+        .select("id")
+        .eq("serial_number", serial)
+        .single();
 
-    alert(`${validData.length} rows uploaded successfully`);
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 means no rows returned
+        console.error("Error checking existing product:", checkError);
+        throw checkError;
+      }
+
+      if (existingData) {
+        // Update existing
+        const { data: updateData, error: updateError } = await supabase
+          .from("products")
+          .update({
+            ...data,
+            updated_at: new Date().toISOString()
+          })
+          .eq("serial_number", serial);
+
+        if (updateError) throw updateError;
+        updatedCount++;
+      } else {
+        // Insert new
+        const { data: insertData, error: insertError } = await supabase
+          .from("products")
+          .insert([{
+            ...data,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }]);
+
+        if (insertError) throw insertError;
+        insertedCount++;
+      }
+    }
+
+    // Prepare message
+    let message = `Processed: ${insertedCount} inserted, ${updatedCount} updated`;
+    if (skippedCount > 0) {
+      message += `, ${skippedCount} skipped (missing or invalid serial number)`;
+    }
+    alert(message);
+
     previewData.value = [];
   } catch (error) {
     console.error("Upload error:", error);
