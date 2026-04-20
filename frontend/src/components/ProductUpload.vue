@@ -165,8 +165,26 @@ async function uploadToSupabase() {
   isUploading.value = true;
   const validData = previewData.value.filter((row) => !row.errors?.length);
 
+  // Transform data to match Supabase schema (exclude 'errors' field)
+  const dataToInsert = validData.map(row => ({
+    serial_number: row.serial_number,
+    manage_code: row.manage_code,
+    manage_name: row.manage_name,
+    print_name: row.print_name,
+    quantity: row.quantity,
+    safety_quantity: row.safety_quantity,
+    purchase_price: row.purchase_price,
+    consumer_price: row.consumer_price,
+    supplier: row.supplier,
+    location: row.location,
+    barcode: row.barcode,
+    weight: row.weight,
+    freight_amount: row.freight_amount,
+    spec: row.spec
+  }));
+
   try {
-    const { data, error } = await supabase.from("products").insert(validData);
+    const { data, error } = await supabase.from("products").insert(dataToInsert);
 
     if (error) throw error;
 
