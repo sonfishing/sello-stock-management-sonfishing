@@ -205,7 +205,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { supabase } from "./supabaseClient";
 import ProductUpload from "./components/ProductUpload.vue";
 
