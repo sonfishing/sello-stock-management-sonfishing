@@ -1,0 +1,301 @@
+<template>
+  <div class="upload-container">
+    <h2>Excel File Upload</h2>
+
+    <div class="upload-area" @dragover.prevent @drop.prevent="handleDrop">
+      <input type="file" accept=".xlsx, .xls" @change="handleFileSelect" ref="fileInput" />
+      <div class="upload-hint">
+        <p>Select Excel file or drag and drop here</p>
+        <p class="format-hint">Columns: manage_code, manage_name, quantity, purchase_price, consumer_price, spec, supplier, location, barcode</p>
+      </div>
+    </div>
+
+    <div v-if="previewData.length > 0" class="preview-section">
+      <h3>Data Preview ({{ previewData.length }} rows)</h3>
+
+      <div class="validation-summary">
+        <span :class="['badge', hasErrors ? 'error' : 'success']">
+          {{ hasErrors ? 'Has Errors' : 'Valid' }}
+        </span>
+        <button @click="uploadToSupabase" :disabled="hasErrors || isUploading">
+          {{ isUploading ? 'Uploading...' : 'Upload to Supabase' }}
+        </button>
+        <button @click="clearData" class="secondary">Clear</button>
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Row</th>
+              <th>Status</th>
+              <th>Manage Code</th>
+              <th>Product Name</th>
+              <th>Qty</th>
+              <th>Purchase Price</th>
+              <th>Consumer Price</th>
+              <th>Spec</th>
+              <th>Supplier</th>
+              <th>Location</th>
+              <th>Barcode</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, index) in previewData" :key="index" :class="{ 'error-row': row.errors?.length }">
+              <td>{{ index + 2 }}</td>
+              <td>
+                <span v-if="row.errors?.length" class="error-badge">Error</span>
+                <span v-else class="success-badge">OK</span>
+              </td>
+              <td>{{ row.manage_code }}</td>
+              <td>{{ row.manage_name }}</td>
+              <td>{{ row.quantity }}</td>
+              <td>{{ row.purchase_price }}</td>
+              <td>{{ row.consumer_price }}</td>
+              <td>{{ row.spec }}</td>
+              <td>{{ row.supplier }}</td>
+              <td>{{ row.location }}</td>
+              <td>{{ row.barcode }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div v-if="errorSummary.length > 0" class="error-summary">
+        <h4>Error Summary</h4>
+        <ul>
+          <li v-for="(error, index) in errorSummary" :key="index">{{ error }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed } from "vue";
+import * as XLSX from "xlsx";
+import { supabase } from "../supabaseClient";
+
+const fileInput = ref(null);
+const previewData = ref([]);
+const isUploading = ref(false);
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (file) parseExcel(file);
+}
+
+function handleDrop(event) {
+  const file = event.dataTransfer.files[0];
+  if (file) parseExcel(file);
+}
+
+function parseExcel(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const data = new Uint8Array(e.target.result);
+    const workbook = XLSX.read(data, { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+    const headers = jsonData[0] || [];
+    const rows = jsonData.slice(1);
+
+    previewData.value = rows
+      .filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== ""))
+      .map((row) => {
+        const item = {
+          manage_code: getCellValue(row, headers, "manage_code") || getCellValue(row, headers, "Manage Code") || "",
+          manage_name: getCellValue(row, headers, "manage_name") || getCellValue(row, headers, "Product Name") || "",
+          print_name: getCellValue(row, headers, "print_name") || getCellValue(row, headers, "Print Name") || "",
+          quantity: Number(getCellValue(row, headers, "quantity")) || Number(getCellValue(row, headers, "Qty")) || 0,
+          safety_quantity: Number(getCellValue(row, headers, "safety_quantity")) || 0,
+          purchase_price: Number(getCellValue(row, headers, "purchase_price")) || Number(getCellValue(row, headers, "Purchase Price")) || 0,
+          consumer_price: Number(getCellValue(row, headers, "consumer_price")) || Number(getCellValue(row, headers, "Consumer Price")) || 0,
+          supplier: getCellValue(row, headers, "supplier") || getCellValue(row, headers, "Supplier") || "",
+          location: getCellValue(row, headers, "location") || getCellValue(row, headers, "Location") || "",
+          barcode: getCellValue(row, headers, "barcode") || "",
+          weight: getCellValue(row, headers, "weight") || "",
+          freight_amount: getCellValue(row, headers, "freight_amount") || "",
+          spec: getCellValue(row, headers, "spec") || getCellValue(row, headers, "Spec") || "",
+          serial_number: getCellValue(row, headers, "serial_number") ? Number(getCellValue(row, headers, "serial_number")) : null,
+          errors: [],
+        };
+
+        if (!item.manage_name) {
+          item.errors.push("Product name is required");
+        }
+
+        return item;
+      });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function getCellValue(row, headers, key) {
+  const colIndex = headers.findIndex((h) => String(h).trim() === key);
+  if (colIndex === -1) return null;
+  return row[colIndex];
+}
+
+const hasErrors = computed(() => previewData.value.some((row) => row.errors?.length > 0));
+
+const errorSummary = computed(() => {
+  const errors = new Set();
+  previewData.value.forEach((row) => {
+    row.errors?.forEach((e) => errors.add(e));
+  });
+  return Array.from(errors);
+});
+
+async function uploadToSupabase() {
+  if (hasErrors.value) return;
+
+  isUploading.value = true;
+  const validData = previewData.value.filter((row) => !row.errors?.length);
+
+  try {
+    const { data, error } = await supabase.from("products").insert(validData);
+
+    if (error) throw error;
+
+    alert(`${validData.length} rows uploaded successfully`);
+    previewData.value = [];
+  } catch (error) {
+    console.error("Upload error:", error);
+    alert(`Upload failed: ${error.message}`);
+  } finally {
+    isUploading.value = false;
+  }
+}
+
+function clearData() {
+  previewData.value = [];
+  if (fileInput.value) fileInput.value.value = "";
+}
+</script>
+
+<style scoped>
+.upload-container {
+  padding: 20px;
+}
+
+.upload-area {
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 40px;
+  text-align: center;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.upload-area input[type="file"] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.upload-hint p {
+  margin: 5px 0;
+}
+
+.format-hint {
+  font-size: 12px;
+  color: #666;
+}
+
+.preview-section {
+  margin-top: 20px;
+}
+
+.validation-summary {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.badge {
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.badge.error {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.badge.success {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th, td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+th {
+  background: #f5f5f5;
+  position: sticky;
+  top: 0;
+}
+
+.error-row {
+  background: #ffebee;
+}
+
+.error-badge {
+  color: #c62828;
+  font-weight: bold;
+}
+
+.success-badge {
+  color: #2e7d32;
+}
+
+.error-summary {
+  margin-top: 15px;
+  padding: 10px;
+  background: #ffebee;
+  border-radius: 4px;
+}
+
+button {
+  padding: 8px 16px;
+  background: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+button.secondary {
+  background: #666;
+}
+</style>
