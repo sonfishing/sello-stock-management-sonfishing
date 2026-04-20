@@ -179,7 +179,23 @@ async function uploadToSupabase() {
   isUploading.value = true;
   const validData = previewData.value.filter((row) => !row.errors?.length);
 
-  // Transform data to match Supabase schema (exclude 'errors' field)
+  // Helper function to parse Korean date format
+function parseKoreanDate(dateStr) {
+  if (!dateStr) return null;
+  try {
+    // Handle Korean format: "2026-04-03 오전 11:54:54" or "2026-03-06 오후 10:59:17"
+    let cleanStr = String(dateStr).trim();
+    // Replace Korean AM/PM
+    cleanStr = cleanStr.replace('오전', 'AM').replace('오후', 'PM');
+    const date = new Date(cleanStr);
+    if (isNaN(date.getTime())) return null;
+    return date.toISOString();
+  } catch {
+    return null;
+  }
+}
+
+// Transform data to match Supabase schema (exclude 'errors' field)
   const dataToInsert = validData.map(row => ({
     serial_number: row.serial_number,
     image_url: row.image_url,
@@ -199,8 +215,8 @@ async function uploadToSupabase() {
     freight_amount: row.freight_amount,
     spec: row.spec,
     is_hidden: row.is_hidden,
-    registered_at: row.registered_at ? new Date(row.registered_at).toISOString() : null,
-    updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : null
+    registered_at: parseKoreanDate(row.registered_at),
+    updated_at: parseKoreanDate(row.updated_at)
   }));
 
   try {
