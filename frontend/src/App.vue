@@ -23,12 +23,20 @@
         </label>
       </div>
       
-      <!-- Field Visibility Checklist -->
+      <!-- Field Visibility & Ordering Checklist -->
       <div class="column-visibility-container">
-        <strong>표시 항목: </strong>
-        <label v-for="(col, key) in columnVisibility" :key="key" class="vis-label">
-          <input type="checkbox" v-model="col.visible" /> {{ defaultCols[key].label }}
-        </label>
+        <strong>표시 및 순서 (드래그하여 순서 변경): </strong>
+        <div 
+          v-for="(key, index) in columnOrder" 
+          :key="key" 
+          class="vis-label draggable-col"
+          draggable="true"
+          @dragstart="onColDragStart(index)"
+          @dragover.prevent
+          @drop="onColDrop(index)"
+        >
+          <input type="checkbox" v-model="columnVisibility[key].visible" /> {{ defaultCols[key].label }}
+        </div>
       </div>
 
       <div class="add-product">
@@ -135,6 +143,9 @@
                        <template v-if="key === 'is_hidden'">{{ row.product.is_hidden ? '숨김' : '노출' }}</template>
                        <template v-else-if="key === 'updated_at'">
                          <span class="text-muted">{{ formatDate(row.product.updated_at) }}</span>
+                       </template>
+                       <template v-else-if="key === 'manage_name' && row.idxInGroup !== undefined">
+                         {{ getShortName(row.product.manage_name) }}
                        </template>
                        <template v-else>{{ row.product[key] }}</template>
                     </div>
@@ -249,8 +260,23 @@ const columnVisibility = ref(Object.keys(defaultCols).reduce((acc, key) => {
   return acc;
 }, {}));
 
+const columnOrder = ref(Object.keys(defaultCols));
+const draggingColIdx = ref(null);
+
+const onColDragStart = (idx) => {
+  draggingColIdx.value = idx;
+};
+
+const onColDrop = (idx) => {
+  if (draggingColIdx.value === null) return;
+  const item = columnOrder.value.splice(draggingColIdx.value, 1)[0];
+  columnOrder.value.splice(idx, 0, item);
+  draggingColIdx.value = null;
+  localStorage.setItem('columnOrder', JSON.stringify(columnOrder.value));
+};
+
 const visibleColsKeys = computed(() => {
-  return Object.keys(defaultCols).filter(k => columnVisibility.value[k].visible);
+  return columnOrder.value.filter(k => columnVisibility.value[k].visible);
 });
 
 const visibleColCount = computed(() => visibleColsKeys.value.length);
@@ -258,18 +284,28 @@ const visibleColCount = computed(() => visibleColsKeys.value.length);
 onMounted(() => {
   selectTab('🔍 검색');
 
-  const saved = localStorage.getItem('columnVisibility');
-  if (saved) {
+  const savedVis = localStorage.getItem('columnVisibility');
+  if (savedVis) {
     try {
-      const parsed = JSON.parse(saved);
+      const parsed = JSON.parse(savedVis);
       for (const key in columnVisibility.value) {
         if (parsed[key] !== undefined && parsed[key].visible !== undefined) {
           columnVisibility.value[key].visible = parsed[key].visible;
         }
       }
-    } catch {
-      // suppress
-    }
+    } catch {}
+  }
+
+  const savedOrder = localStorage.getItem('columnOrder');
+  if (savedOrder) {
+    try {
+      const parsed = JSON.parse(savedOrder);
+      // Validate in case defaultCols changed
+      const validKeys = Object.keys(defaultCols);
+      const filtered = parsed.filter(k => validKeys.includes(k));
+      const missing = validKeys.filter(k => !filtered.includes(k));
+      columnOrder.value = [...filtered, ...missing];
+    } catch {}
   }
   
   window.addEventListener('mouseup', () => { isDragging.value = false; });
@@ -385,6 +421,12 @@ const groupedProducts = computed(() => {
 
   return result;
 });
+
+function getShortName(fullName) {
+  if (!fullName) return '';
+  const parts = fullName.split(':');
+  return parts.length > 1 ? parts[1].trim() : fullName;
+}
 
 // Render Rows maps the nested view to a flat iteration to track row index 'rIdx'
 const renderRows = computed(() => {
@@ -740,7 +782,9 @@ nav button { padding: 10px 20px; background: #1976d2; color: white; border: none
 .group-toggle input { width: 18px; height: 18px; cursor: pointer; }
 
 .column-visibility-container { background: #fdfdfd; border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.vis-label { display:flex; align-items:center; gap:4px; font-size:13px; cursor:pointer; }
+.vis-label { display:flex; align-items:center; gap:4px; font-size:13px; cursor:pointer; padding: 4px 8px; background: #eee; border-radius: 4px; }
+.draggable-col { cursor: grab; border: 1px solid #ccc; }
+.draggable-col:active { cursor: grabbing; }
 
 .add-product { margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 8px; }
 .add-product input { margin-right: 10px; padding: 8px; }
