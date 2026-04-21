@@ -208,75 +208,87 @@ async function uploadToSupabase() {
     }
   }
 
-   // Transform data to match Supabase schema (exclude 'errors' field)
-   const transformRow = (row) => ({
-     serial_number: Number(row.serial_number),
-     image_url: row.image_url,
-     manage_code: row.manage_code,
-     manage_name: row.manage_name,
-     print_name: row.print_name,
-     memo: row.memo,
-     quantity: row.quantity,
-     safety_quantity: row.safety_quantity,
-     purchase_price: row.purchase_price,
-     consumer_price: row.consumer_price,
-     supplier: row.supplier,
-     location: row.location,
-     barcode: row.barcode,
-     barcode_format: row.barcode_format,
-     weight: row.weight,
-     freight_amount: row.freight_amount,
-     spec: row.spec,
-     is_hidden: row.is_hidden,
-     registered_at: parseKoreanDate(row.registered_at),
-     updated_at: parseKoreanDate(row.updated_at)
-   });
+  // Transform data to match Supabase schema (exclude 'errors' field)
+  const transformRow = (row) => ({
+    serial_number: Number(row.serial_number),
+    image_url: row.image_url,
+    manage_code: row.manage_code,
+    manage_name: row.manage_name,
+    print_name: row.print_name,
+    memo: row.memo,
+    quantity: row.quantity,
+    safety_quantity: row.safety_quantity,
+    purchase_price: row.purchase_price,
+    consumer_price: row.consumer_price,
+    supplier: row.supplier,
+    location: row.location,
+    barcode: row.barcode,
+    barcode_format: row.barcode_format,
+    weight: row.weight,
+    freight_amount: row.freight_amount,
+    spec: row.spec,
+    is_hidden: row.is_hidden,
+    registered_at: parseKoreanDate(row.registered_at),
+    updated_at: parseKoreanDate(row.updated_at)
+  });
 
   let insertedCount = 0;
   let updatedCount = 0;
   let skippedCount = rowsWithoutSerial.length + rowsWithErrors.length;
+  const now = new Date().toISOString();
 
   try {
-    // Process rows with serial_number: upsert based on serial_number
-    for (const row of rowsWithSerial) {
-      const data = transformRow(row);
-      const serial = data.serial_number;
+    if (rowsWithSerial.length > 0) {
+      // Step 1: Get ALL existing serial_numbers in one query
+      const serialsToCheck = rowsWithSerial.map(r => r.serial_number);
+      const { data: existingProducts, error: fetchError } = await supabase
+        .from("products")
+        .select("serial_number")
+        .in("serial_number", serialsToCheck);
 
-       // Check if product with this serial_number exists
-       const { data: existingData, error: checkError } = await supabase
-         .from("products")
-         .select("id")
-         .eq("serial_number", serial);
+      if (fetchError) throw fetchError;
 
-       if (checkError) {
-         console.error("Error checking existing product:", checkError);
-         throw checkError;
-       }
+      const existingSerials = new Set(existingProducts?.map(p => p.serial_number) || []);
 
-       // existingData is an array; check if any rows were returned
-       if (existingData && existingData.length > 0) {
-         // Update existing
-         const { data: updateData, error: updateError } = await supabase
-           .from("products")
-           .update({
-             ...data,
-             updated_at: new Date().toISOString()
-           })
-           .eq("serial_number", serial);
+      // Step 2: Separate rows into update vs insert batches
+      const rowsToUpdate = [];
+      const rowsToInsert = [];
 
-         if (updateError) throw updateError;
-         updatedCount++;
-       } else {
-         // Insert new
-         const { data: insertData, error: insertError } = await supabase
-           .from("products")
-           .insert([{
-             ...data,
-             updated_at: new Date().toISOString()
-           }]);
+      rowsWithSerial.forEach(row => {
+        const data = transformRow(row);
+        data.updated_at = now;
+        if (existingSerials.has(data.serial_number)) {
+          rowsToUpdate.push(data);
+        } else {
+          rowsToInsert.push(data);
+        }
+      });
+
+      // Step 3: Bulk insert new rows (if any)
+      if (rowsToInsert.length > 0) {
+        const { error: insertError } = await supabase
+          .from("products")
+          .insert(rowsToInsert);
 
         if (insertError) throw insertError;
-        insertedCount++;
+        insertedCount = rowsToInsert.length;
+      }
+
+      // Step 4: Bulk update existing rows (process in batches of 100)
+      if (rowsToUpdate.length > 0) {
+        const batchSize = 100;
+        for (let i = 0; i < rowsToUpdate.length; i += batchSize) {
+          const batch = rowsToUpdate.slice(i, i + batchSize);
+          const serials = batch.map(b => b.serial_number);
+
+          // Update all rows in batch where serial_number matches
+          const { error: updateError } = await supabase
+            .from("products")
+            .upsert(batch, { onConflict: 'serial_number', defaultValues: { updated_at: now } });
+
+          if (updateError) throw updateError;
+        }
+        updatedCount = rowsToUpdate.length;
       }
     }
 
