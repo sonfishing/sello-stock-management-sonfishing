@@ -403,7 +403,6 @@
           </template>
         </tbody>
       </table>
-    </div>
   </div>
 </template>
 
