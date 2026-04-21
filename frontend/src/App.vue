@@ -182,6 +182,46 @@ const tabProducts = ref({});
 const activeTab = ref('🔍 검색');
 const loadingTabs = ref(new Set());
 
+// Undo Stack for Ctrl+Z
+const undoStack = ref([]);
+const pushToUndo = (changes) => {
+  undoStack.value.push(changes);
+  if (undoStack.value.length > 50) undoStack.value.shift(); // Limit stack size
+};
+
+const undoLastAction = async () => {
+  if (undoStack.value.length === 0) return;
+  const lastChanges = undoStack.value.pop();
+  const promises = [];
+  const updatedProducts = new Map();
+
+  for (const change of lastChanges) {
+    const { id, field, oldValue } = change;
+    const updates = { [field]: oldValue, updated_at: new Date().toISOString() };
+    promises.push(supabase.from('products').update(updates).eq('id', id));
+    
+    // Track updates for local cache sync
+    if (!updatedProducts.has(id)) updatedProducts.set(id, {});
+    updatedProducts.get(id)[field] = oldValue;
+    updatedProducts.get(id).updated_at = updates.updated_at;
+  }
+
+  addToast(`복구 중 (${lastChanges.length}개 항목)...`);
+  await Promise.all(promises);
+
+  // Sync local cache
+  const active = activeTab.value;
+  if (active && tabProducts.value[active]) {
+    updatedProducts.forEach((updates, id) => {
+      const idx = tabProducts.value[active].findIndex(p => p.id === id);
+      if (idx !== -1) {
+        tabProducts.value[active][idx] = { ...tabProducts.value[active][idx], ...updates };
+      }
+    });
+  }
+  addToast('복구 완료');
+};
+
 const defaultCols = {
   manage_code: { label: '관리코드', width: '120px', visible: true },
   manage_name: { label: '관리상품명', width: '250px', visible: true },
@@ -432,6 +472,12 @@ function isEditing(r, c) {
 function handleGlobalKeydown(e) {
   if (editingCell.value) return; // Native logic
   
+  if (e.key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    undoLastAction();
+    return;
+  }
+
   if (e.key === 'Delete' || e.key === 'Backspace') {
       if (!selStart.value || !selEnd.value) return;
       
@@ -442,6 +488,7 @@ function handleGlobalKeydown(e) {
       
       const itemsOnly = itemsOnlyGrid.value;
       const promises = [];
+      const batchChanges = [];
       let updateCount = 0;
       
       for (let r = rMin; r <= rMax; r++) {
@@ -462,6 +509,7 @@ function handleGlobalKeydown(e) {
             }
             
             if (product[key] !== emptyVal) {
+               batchChanges.push({ id: product.id, field: key, oldValue: product[key] });
                product[key] = emptyVal;
                updates[key] = emptyVal;
                changed = true;
@@ -476,6 +524,7 @@ function handleGlobalKeydown(e) {
       }
       
       if (updateCount > 0) {
+         pushToUndo(batchChanges);
          addToast(`${updateCount}개 데이터 삭제 반영 중...`);
          Promise.all(promises).then(() => {
             addToast('삭제 반영 완료');
@@ -525,6 +574,7 @@ async function handleGlobalPaste(e) {
    const lines = text.split(/\r?\n/).map(row => row.split('\t'));
    const itemsOnly = itemsOnlyGrid.value;
    const promises = [];
+   const batchChanges = [];
    let updateCount = 0;
    
    for (let i = 0; i < lines.length; i++) {
@@ -551,6 +601,7 @@ async function handleGlobalPaste(e) {
          }
          
          if (product[key] !== val) {
+           batchChanges.push({ id: product.id, field: key, oldValue: product[key] });
            product[key] = val; // Optimistic logic
            updates[key] = val;
            changed = true;
@@ -565,6 +616,7 @@ async function handleGlobalPaste(e) {
    }
    
    if (updateCount > 0) {
+     pushToUndo(batchChanges);
      addToast(`${updateCount}개 데이터 반영 중...`);
      await Promise.all(promises);
      addToast('붙여넣기 반영 완료');
@@ -582,6 +634,14 @@ function closeAndSave(product, key, newVal) {
 }
 
 async function updateField(id, field, value) {
+  // Get old value for undo
+  let oldValue = null;
+  const active = activeTab.value;
+  if (active && tabProducts.value[active]) {
+    const p = tabProducts.value[active].find(p => p.id === id);
+    if (p) oldValue = p[field];
+  }
+
   const updates = {
     [field]: value,
     updated_at: new Date().toISOString()
@@ -596,7 +656,7 @@ async function updateField(id, field, value) {
     console.error("Error updating:", error);
     alert("수정 실패: " + error.message);
   } else {
-    const active = activeTab.value;
+    pushToUndo([{ id, field, oldValue }]);
     if (active && tabProducts.value[active]) {
       const idx = tabProducts.value[active].findIndex(p => p.id === id);
       if (idx !== -1) {
