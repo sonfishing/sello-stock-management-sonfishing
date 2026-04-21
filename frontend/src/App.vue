@@ -7,6 +7,13 @@
     
     <ProductUpload v-if="currentView === 'upload'" />
     
+    <!-- Toast Container -->
+    <div class="toast-container">
+      <div v-for="toast in toastMessages" :key="toast.id" class="toast">
+        {{ toast.text }}
+      </div>
+    </div>
+
     <div v-if="currentView === 'list'">
       <div class="header-container">
         <h1>재고 대시보드</h1>
@@ -78,8 +85,8 @@
             <template v-for="node in groupedProducts" :key="node.id || node.product?.id">
               <!-- Group Row -->
               <template v-if="node.isGroup">
-                <tr class="group-row" @click="toggleGroup(node.prefix)">
-                  <td style="text-align: center; position: sticky; left: 0; background: #eaeff5; z-index: 1; border-right: 1px solid #ddd;">
+                <tr class="group-row" @click="toggleGroup(node.prefix)" :style="{ backgroundColor: node.color }">
+                  <td :style="{ backgroundColor: node.color, textAlign: 'center', position: 'sticky', left: 0, zIndex: 1, borderRight: '1px solid #ddd' }">
                     <span class="expand-icon">{{ expandedGroups.has(node.prefix) ? '▼' : '▶' }}</span>
                   </td>
                   <td v-if="columnVisibility.manage_code.visible"><strong>{{ node.prefix }}</strong></td>
@@ -88,8 +95,8 @@
 
                 <!-- Items in Group -->
                 <template v-if="expandedGroups.has(node.prefix)">
-                  <tr v-for="(product, idx) in node.items" :key="product.id" class="item-row">
-                     <td style="text-align: center; color: #888; font-size: 11px; position: sticky; left: 0; background: #fff; z-index: 1; border-right: 1px solid #ddd;">
+                  <tr v-for="(product, idx) in node.items" :key="product.id" class="item-row" :style="{ backgroundColor: node.color }">
+                     <td :style="{ backgroundColor: node.color, textAlign: 'center', color: '#888', fontSize: '11px', position: 'sticky', left: 0, zIndex: 1, borderRight: '1px solid #ddd' }">
                       {{ idx + 1 }}
                     </td>
                     <td v-if="columnVisibility.manage_code.visible"><input class="full-input" :value="product.manage_code" @change="updateField(product.id, 'manage_code', $event.target.value)" /></td>
@@ -122,8 +129,8 @@
 
               <!-- Flat Item Row -->
               <template v-else>
-                <tr class="item-row" :key="node.product.id">
-                  <td style="text-align: center; color: #888; font-size: 11px; position: sticky; left: 0; background: #fff; z-index: 1; border-right: 1px solid #ddd;">
+                <tr class="item-row" :key="node.product.id" :style="{ backgroundColor: node.color || '#fff' }">
+                  <td :style="{ backgroundColor: node.color || '#fff', textAlign: 'center', color: '#888', fontSize: '11px', position: 'sticky', left: 0, zIndex: 1, borderRight: '1px solid #ddd' }">
                     -
                   </td>
                   <td v-if="columnVisibility.manage_code.visible"><input class="full-input" :value="node.product.manage_code" @change="updateField(node.product.id, 'manage_code', $event.target.value)" /></td>
@@ -178,6 +185,16 @@ const newProduct = ref({
 });
 const currentView = ref("list");
 const isGroupView = ref(true); // Switch for group view
+const toastMessages = ref([]);
+
+function addToast(message) {
+  const id = Date.now() + Math.random();
+  toastMessages.value.push({ id, text: message });
+  setTimeout(() => {
+    toastMessages.value = toastMessages.value.filter(t => t.id !== id);
+  }, 2000);
+}
+
 const expandedGroups = ref(new Set()); // Group expansion state
 const tabProducts = ref({}); // Tab caching
 const activeTab = ref(null);
@@ -285,7 +302,6 @@ const groupedProducts = computed(() => {
     const prefix = parts[0];
 
     if (!groupsMap.has(prefix)) {
-      // Rep name extraction
       let baseName = product.manage_name || '';
       baseName = baseName.replace(/\[.*?\]\s*/, '').split(':')[0].trim();
 
@@ -301,10 +317,17 @@ const groupedProducts = computed(() => {
     groupsMap.get(prefix).items.push(product);
   });
 
+  const pastelColors = ['#ffebeb', '#fff3e6', '#fffae6', '#ecfced', '#e6f7ff', '#f0f0ff', '#f9f0ff'];
+  let colorIdx = 0;
+
   groupsMap.forEach(group => {
+    const color = pastelColors[colorIdx % pastelColors.length];
+    colorIdx++;
+    group.color = color;
+    
     // Single items are not grouped
     if (group.items.length === 1) {
-      result.push({ isItem: true, product: group.items[0] });
+      result.push({ isItem: true, product: group.items[0], color });
     } else {
       result.push(group);
     }
@@ -361,6 +384,8 @@ async function updateField(id, field, value) {
         tabProducts.value[active][idx] = { ...tabProducts.value[active][idx], ...updates };
       }
     }
+    const fieldLabel = defaultCols[field]?.label || field;
+    addToast(`"${fieldLabel}" 항목이 수정되었습니다.`);
   }
 }
 
@@ -556,4 +581,31 @@ nav button { padding: 10px 20px; background: #1976d2; color: white; border: none
 }
 
 .expand-icon { font-size: 12px; color: #666; }
+
+.toast-container {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 9999;
+}
+.toast {
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  animation: slideIn 0.2s ease-out, fadeOut 0.2s ease-in 1.8s forwards;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes fadeOut {
+  to { opacity: 0; }
+}
 </style>
