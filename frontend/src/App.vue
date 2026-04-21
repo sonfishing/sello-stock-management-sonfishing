@@ -17,10 +17,52 @@
     <div v-if="currentView === 'list'">
       <div class="header-container">
         <h1>재고 대시보드</h1>
-        <label class="group-toggle">
-          <input type="checkbox" v-model="isGroupView" />
-          <span>그룹으로 묶어보기</span>
-        </label>
+        <div class="header-actions">
+          <button class="excel-download-btn" @click="openDownloadModal">
+            📥 엑셀 다운로드
+            <span v-if="modifiedIds.size > 0" class="modified-badge">{{ modifiedIds.size }}</span>
+          </button>
+          <label class="group-toggle">
+            <input type="checkbox" v-model="isGroupView" />
+            <span>그룹으로 묶어보기</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Excel Download Modal -->
+      <div v-if="showDownloadModal" class="modal-overlay" @click.self="showDownloadModal = false">
+        <div class="modal-box">
+          <h2 class="modal-title">📥 엑셀 다운로드</h2>
+
+          <div class="modal-section">
+            <label class="modal-label">다운로드 범위</label>
+            <div class="radio-group">
+              <label>
+                <input type="radio" v-model="downloadMode" value="all" /> 전체 (현재 탭)
+              </label>
+              <label :class="{ disabled: modifiedIds.size === 0 }">
+                <input type="radio" v-model="downloadMode" value="modified" :disabled="modifiedIds.size === 0" />
+                수정된 항목만
+                <span class="badge">{{ modifiedIds.size }}개</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="modal-section">
+            <label class="modal-label">포함할 컬럼 선택</label>
+            <div class="col-check-grid">
+              <label v-for="key in Object.keys(defaultCols)" :key="key" class="col-check-item">
+                <input type="checkbox" v-model="downloadCols[key]" />
+                {{ defaultCols[key].label }}
+              </label>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn-cancel" @click="showDownloadModal = false">취소</button>
+            <button class="btn-download" @click="doDownloadExcel">다운로드</button>
+          </div>
+        </div>
       </div>
       
       <!-- Field Visibility & Ordering Checklist -->
@@ -77,9 +119,18 @@
         <table class="product-table" @dragstart.prevent>
           <thead>
             <tr>
-              <th style="min-width: 50px; position: sticky; left: 0; z-index: 2; background: #f5f5f5;">No</th>
-              <th v-for="key in visibleColsKeys" :key="key" :style="{ minWidth: defaultCols[key].width }">
-                {{ defaultCols[key].label }}
+              <th class="th-no" style="position: sticky; left: 0; z-index: 2; background: #f5f5f5;">No</th>
+              <th
+                v-for="key in visibleColsKeys"
+                :key="key"
+                class="resizable-th"
+                :style="{ width: colWidths[key] + 'px', minWidth: '40px' }"
+              >
+                <span class="th-label">{{ defaultCols[key].label }}</span>
+                <span
+                  class="col-resize-handle"
+                  @mousedown.stop.prevent="startColResize($event, key)"
+                ></span>
               </th>
             </tr>
           </thead>
@@ -281,6 +332,130 @@ const visibleColsKeys = computed(() => {
 
 const visibleColCount = computed(() => visibleColsKeys.value.length);
 
+// ─── Column Resize ───────────────────────────────────────────────────────────
+const DEFAULT_COL_WIDTHS = Object.fromEntries(
+  Object.entries(defaultCols).map(([k, v]) => [k, parseInt(v.width) || 120])
+);
+const colWidths = ref({ ...DEFAULT_COL_WIDTHS });
+
+let resizingKey = null;
+let resizeStartX = 0;
+let resizeStartW = 0;
+
+function startColResize(event, key) {
+  resizingKey = key;
+  resizeStartX = event.clientX;
+  resizeStartW = colWidths.value[key];
+  document.addEventListener('mousemove', onColResizeMove);
+  document.addEventListener('mouseup', stopColResize);
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+}
+
+function onColResizeMove(event) {
+  if (!resizingKey) return;
+  const delta = event.clientX - resizeStartX;
+  colWidths.value[resizingKey] = Math.max(40, resizeStartW + delta);
+}
+
+function stopColResize() {
+  resizingKey = null;
+  document.removeEventListener('mousemove', onColResizeMove);
+  document.removeEventListener('mouseup', stopColResize);
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  // Persist widths
+  localStorage.setItem('colWidths', JSON.stringify(colWidths.value));
+}
+
+// ─── Modified IDs Tracking (localStorage) ────────────────────────────────────
+const MODIFIED_KEY = 'modifiedProductIds';
+const modifiedIds = ref(new Set(
+  JSON.parse(localStorage.getItem(MODIFIED_KEY) || '[]')
+));
+
+function markModified(id) {
+  modifiedIds.value.add(id);
+  localStorage.setItem(MODIFIED_KEY, JSON.stringify([...modifiedIds.value]));
+}
+
+function clearModified() {
+  modifiedIds.value.clear();
+  localStorage.removeItem(MODIFIED_KEY);
+}
+
+// ─── Excel Download Modal ─────────────────────────────────────────────────────
+const showDownloadModal = ref(false);
+const downloadMode = ref('all'); // 'all' | 'modified'
+const downloadCols = ref(
+  Object.fromEntries(Object.keys(defaultCols).map(k => [
+    k, k === 'serial_number' || k === 'manage_name'
+  ]))
+);
+
+function openDownloadModal() {
+  showDownloadModal.value = true;
+  if (modifiedIds.value.size === 0) downloadMode.value = 'all';
+}
+
+async function doDownloadExcel() {
+  showDownloadModal.value = false;
+
+  // Collect selected columns
+  const selectedKeys = Object.keys(downloadCols.value).filter(k => downloadCols.value[k]);
+  if (selectedKeys.length === 0) { addToast('최소 1개 컬럼을 선택하세요.'); return; }
+
+  addToast('데이터 조회 중...');
+
+  let products = [];
+  if (downloadMode.value === 'modified' && modifiedIds.value.size > 0) {
+    const ids = [...modifiedIds.value];
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .in('id', ids)
+      .eq('is_deleted', false)
+      .order('manage_code', { ascending: true });
+    if (error) { addToast('조회 실패: ' + error.message); return; }
+    products = data;
+  } else {
+    // Download all from ALL tabs (full DB)
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_deleted', false)
+      .order('manage_code', { ascending: true });
+    if (error) { addToast('조회 실패: ' + error.message); return; }
+    products = data;
+  }
+
+  if (products.length === 0) { addToast('다운로드할 데이터가 없습니다.'); return; }
+
+  // Build CSV
+  const headers = selectedKeys.map(k => defaultCols[k].label);
+  const rows = products.map(p =>
+    selectedKeys.map(k => {
+      const val = p[k];
+      if (val === null || val === undefined) return '';
+      if (k === 'is_hidden') return val ? '숨김' : '노출';
+      if (k === 'updated_at') return formatDate(val);
+      return String(val).replace(/"/g, '""');
+    }).map(v => `"${v}"`).join(',')
+  );
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+  a.href = url;
+  a.download = `상품DB_${downloadMode.value === 'modified' ? '수정항목' : '전체'}_${ts}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  addToast(`다운로드 완료 (${products.length}개)`);
+}
+
 onMounted(() => {
   selectTab('🔍 검색');
 
@@ -305,6 +480,16 @@ onMounted(() => {
       const filtered = parsed.filter(k => validKeys.includes(k));
       const missing = validKeys.filter(k => !filtered.includes(k));
       columnOrder.value = [...filtered, ...missing];
+    } catch {}
+  }
+
+  const savedWidths = localStorage.getItem('colWidths');
+  if (savedWidths) {
+    try {
+      const parsed = JSON.parse(savedWidths);
+      for (const key in colWidths.value) {
+        if (parsed[key] !== undefined) colWidths.value[key] = parsed[key];
+      }
     } catch {}
   }
   
@@ -698,6 +883,7 @@ async function updateField(id, field, value) {
     console.error("Error updating:", error);
     alert("수정 실패: " + error.message);
   } else {
+    markModified(id);
     pushToUndo([{ id, field, oldValue }]);
     if (active && tabProducts.value[active]) {
       const idx = tabProducts.value[active].findIndex(p => p.id === id);
@@ -778,8 +964,73 @@ nav { margin-bottom: 20px; gap: 10px; display: flex; }
 nav button { padding: 10px 20px; background: #1976d2; color: white; border: none; cursor: pointer; }
 
 .header-container { display: flex; justify-content: space-between; align-items: center; }
+.header-actions { display: flex; align-items: center; gap: 12px; }
 .group-toggle { display: flex; align-items: center; gap: 8px; font-weight: bold; cursor: pointer; background: #f0f0f0; padding: 8px 16px; border-radius: 20px; }
 .group-toggle input { width: 18px; height: 18px; cursor: pointer; }
+
+/* Excel Download Button */
+.excel-download-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: linear-gradient(135deg, #217346, #2e9e5c);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(33,115,70,0.35);
+  transition: filter 0.15s, box-shadow 0.15s;
+}
+.excel-download-btn:hover { filter: brightness(1.1); box-shadow: 0 4px 12px rgba(33,115,70,0.45); }
+.modified-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ff5252;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: bold;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10000;
+}
+.modal-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 32px;
+  min-width: 420px;
+  max-width: 560px;
+  width: 90%;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.2);
+}
+.modal-title { margin: 0 0 24px; font-size: 20px; color: #1a1a2e; }
+.modal-section { margin-bottom: 20px; }
+.modal-label { display: block; font-weight: 600; font-size: 13px; color: #555; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+.radio-group { display: flex; gap: 20px; flex-wrap: wrap; }
+.radio-group label { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
+.radio-group label.disabled { opacity: 0.45; cursor: not-allowed; }
+.badge { display: inline-block; background: #e8f4ff; color: #1976d2; border-radius: 10px; padding: 1px 8px; font-size: 12px; font-weight: 600; margin-left: 4px; }
+.col-check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.col-check-item { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; padding: 6px 10px; border: 1px solid #e0e0e0; border-radius: 6px; transition: background 0.15s; }
+.col-check-item:hover { background: #f0f4ff; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.btn-cancel { padding: 9px 20px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; font-size: 14px; }
+.btn-cancel:hover { background: #f5f5f5; }
+.btn-download { padding: 9px 24px; border: none; border-radius: 6px; background: linear-gradient(135deg, #217346, #2e9e5c); color: #fff; cursor: pointer; font-size: 14px; font-weight: 600; }
+.btn-download:hover { filter: brightness(1.1); }
 
 .column-visibility-container { background: #fdfdfd; border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .vis-label { display:flex; align-items:center; gap:4px; font-size:13px; cursor:pointer; padding: 4px 8px; background: #eee; border-radius: 4px; }
@@ -805,9 +1056,38 @@ nav button { padding: 10px 20px; background: #1976d2; color: white; border: none
 
 .table-wrapper { overflow-x: auto; border: 1px solid #ddd; max-height: 80vh; }
 
-.product-table { border-collapse: collapse; white-space: nowrap; user-select: none; }
-.product-table th, .product-table td { border: 1px solid #ddd; text-align: left; padding: 0; }
-.product-table th { background: #f5f5f5; font-weight: bold; padding: 8px; }
+.product-table { border-collapse: collapse; white-space: nowrap; user-select: none; table-layout: fixed; }
+.product-table th, .product-table td { border: 1px solid #ddd; text-align: left; padding: 0; overflow: hidden; }
+.product-table th { background: #f5f5f5; font-weight: bold; padding: 0; }
+.th-no { width: 50px; min-width: 50px; padding: 8px !important; }
+
+/* Resizable Column Header */
+.resizable-th {
+  position: relative;
+  padding: 0;
+  overflow: visible;
+}
+.th-label {
+  display: block;
+  padding: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+  background: transparent;
+  transition: background 0.15s;
+}
+.col-resize-handle:hover, .col-resize-handle:active {
+  background: rgba(25, 118, 210, 0.35);
+}
 
 .padding-cell { display: block; padding: 8px; min-height: 18px;}
 .text-muted { color: #666; }
