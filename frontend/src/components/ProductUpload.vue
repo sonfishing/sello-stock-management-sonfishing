@@ -267,14 +267,13 @@ async function uploadToSupabase() {
         if (updateError) throw updateError;
         updatedCount++;
       } else {
-        // Insert new
-        const { data: insertData, error: insertError } = await supabase
-          .from("products")
-          .insert([{
-            ...data,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }]);
+         // Insert new
+         const { data: insertData, error: insertError } = await supabase
+           .from("products")
+           .insert([{
+             ...data,
+             updated_at: new Date().toISOString()
+           }]);
 
         if (insertError) throw insertError;
         insertedCount++;
