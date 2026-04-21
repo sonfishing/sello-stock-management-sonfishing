@@ -1,34 +1,34 @@
 <template>
   <div class="upload-container">
-    <h2>Excel File Upload</h2>
+    <h2>엑셀 파일 업로드</h2>
 
     <div class="upload-area" @dragover.prevent @drop.prevent="handleDrop">
       <input type="file" accept=".xlsx, .xls" @change="handleFileSelect" ref="fileInput" />
       <div class="upload-hint">
-        <p>Select Excel file or drag and drop here</p>
+        <p>엑셀 파일을 선택하거나 여기로 드래그하세요</p>
         <p class="format-hint">Columns: 일련번호, 이미지URL, 관리코드, 관리상품명, 인쇄상품명, 메모, 사입처, 사입단가, 소비자가, 위치, 재고, 안전재고, 바코드, 바코드포멧, 무게, 운임금액, 규격, 등록일시, 수정일시, 숨김여부</p>
       </div>
     </div>
 
     <div v-if="previewData.length > 0" class="preview-section">
-      <h3>Data Preview ({{ previewData.length }} rows)</h3>
+      <h3>데이터 미리보기 ({{ previewData.length }} 행)</h3>
 
       <div class="validation-summary">
         <span :class="['badge', hasErrors ? 'error' : 'success']">
-          {{ hasErrors ? 'Has Errors' : 'Valid' }}
+          {{ hasErrors ? '에러 발생' : '정상' }}
         </span>
         <button @click="uploadToSupabase" :disabled="hasErrors || isUploading">
-          {{ isUploading ? 'Uploading...' : 'Upload to Supabase' }}
+          {{ isUploading ? '업로드 중...' : 'DB로 업로드' }}
         </button>
-        <button @click="clearData" class="secondary">Clear</button>
+        <button @click="clearData" class="secondary">초기화</button>
       </div>
 
       <div class="table-wrapper">
         <table>
           <thead>
             <tr>
-              <th>Row</th>
-              <th>Status</th>
+              <th>행</th>
+              <th>상태</th>
               <th>일련번호</th>
               <th>이미지URL</th>
               <th>관리코드</th>
@@ -53,8 +53,8 @@
             <tr v-for="(row, index) in previewData" :key="index" :class="{ 'error-row': row.errors?.length }">
               <td>{{ index + 2 }}</td>
               <td>
-                <span v-if="row.errors?.length" class="error-badge">Error</span>
-                <span v-else class="success-badge">OK</span>
+                <span v-if="row.errors?.length" class="error-badge">에러</span>
+                <span v-else class="success-badge">정상</span>
               </td>
               <td>{{ row.serial_number }}</td>
               <td>{{ row.image_url }}</td>
@@ -80,7 +80,7 @@
       </div>
 
       <div v-if="errorSummary.length > 0" class="error-summary">
-        <h4>Error Summary</h4>
+        <h4>에러 요약</h4>
         <ul>
           <li v-for="(error, index) in errorSummary" :key="index">{{ error }}</li>
         </ul>

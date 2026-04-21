@@ -1,22 +1,22 @@
 <template>
   <div id="app">
     <nav>
-      <button @click="currentView = 'list'">Product List</button>
-      <button @click="currentView = 'upload'">Upload Excel</button>
+      <button @click="currentView = 'list'">상품 목록</button>
+      <button @click="currentView = 'upload'">엑셀 업로드</button>
     </nav>
     
     <ProductUpload v-if="currentView === 'upload'" />
     
     <div v-if="currentView === 'list'">
-      <h1>Inventory Dashboard</h1>
+      <h1>재고 대시보드</h1>
       
       <div class="add-product">
-        <h2>Add New Product</h2>
-        <input v-model="newProduct.manage_code" placeholder="Manage Code" />
-        <input v-model="newProduct.manage_name" placeholder="Product Name" />
-        <input v-model.number="newProduct.quantity" placeholder="Quantity" type="number" />
-        <input v-model.number="newProduct.purchase_price" placeholder="Price" type="number" />
-        <button @click="addProduct">Add Product</button>
+        <h2>새 상품 추가</h2>
+        <input v-model="newProduct.manage_code" placeholder="관리 코드" />
+        <input v-model="newProduct.manage_name" placeholder="상품명" />
+        <input v-model.number="newProduct.quantity" placeholder="수량" type="number" />
+        <input v-model.number="newProduct.purchase_price" placeholder="매입가" type="number" />
+        <button @click="addProduct">상품 추가</button>
       </div>
 
       <!-- Tab Navigation -->
@@ -42,7 +42,7 @@
             <th>관리상품명</th>
             <th>재고</th>
             <th>수정일시</th>
-            <th style="width: 80px">Actions</th>
+            <th style="width: 80px">관리</th>
           </tr>
         </thead>
         <tbody>
@@ -218,7 +218,7 @@
 
       <!-- Loading indicator when no tab active or loading -->
       <div v-else class="loading-message">
-        Select a tab to view products
+        탭을 선택하여 상품을 확인하세요
       </div>
     </div>
 
