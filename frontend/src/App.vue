@@ -314,10 +314,14 @@ const groupedProducts = computed(() => {
   const pastelColors = ['#ffebeb', '#fff3e6', '#fffae6', '#ecfced', '#e6f7ff', '#f0f0ff', '#f9f0ff'];
   let colorIdx = 0;
 
-  products.forEach(product => {
-    const code = product.manage_code || '';
-    const parts = code.split('-');
-    const prefix = parts[0];
+  products.forEach((product, idx) => {
+    const code = (product.manage_code || '').trim();
+    let prefix = code.split('-')[0];
+    
+    // For empty codes, generate a unique prefix so they are treated individually
+    if (!prefix) {
+      prefix = `empty-${product.id || idx}`;
+    }
 
     if (!groupsMap.has(prefix)) {
       let baseName = product.manage_name || '';
@@ -328,7 +332,7 @@ const groupedProducts = computed(() => {
       const newGroup = {
         isGroup: true,
         id: `group-${prefix}`,
-        prefix: prefix,
+        prefix: prefix.startsWith('empty-') ? '' : prefix,
         name: baseName,
         items: [],
         color: color
@@ -342,8 +346,12 @@ const groupedProducts = computed(() => {
 
   if (!isGroupView.value) {
     // Flat list mode with colors
-    products.forEach(product => {
-      const prefix = (product.manage_code || '').split('-')[0];
+    products.forEach((product, idx) => {
+      const code = (product.manage_code || '').trim();
+      let prefix = code.split('-')[0];
+      if (!prefix) {
+        prefix = `empty-${product.id || idx}`;
+      }
       const color = groupsMap.get(prefix).color;
       result.push({ isItem: true, product: product, color: color });
     });
