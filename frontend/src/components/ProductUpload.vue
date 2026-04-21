@@ -208,29 +208,29 @@ async function uploadToSupabase() {
     }
   }
 
-  // Transform data to match Supabase schema (exclude 'errors' field)
-  const transformRow = (row) => ({
-    serial_number: row.serial_number,
-    image_url: row.image_url,
-    manage_code: row.manage_code,
-    manage_name: row.manage_name,
-    print_name: row.print_name,
-    memo: row.memo,
-    quantity: row.quantity,
-    safety_quantity: row.safety_quantity,
-    purchase_price: row.purchase_price,
-    consumer_price: row.consumer_price,
-    supplier: row.supplier,
-    location: row.location,
-    barcode: row.barcode,
-    barcode_format: row.barcode_format,
-    weight: row.weight,
-    freight_amount: row.freight_amount,
-    spec: row.spec,
-    is_hidden: row.is_hidden,
-    registered_at: parseKoreanDate(row.registered_at),
-    updated_at: parseKoreanDate(row.updated_at)
-  });
+   // Transform data to match Supabase schema (exclude 'errors' field)
+   const transformRow = (row) => ({
+     serial_number: Number(row.serial_number),
+     image_url: row.image_url,
+     manage_code: row.manage_code,
+     manage_name: row.manage_name,
+     print_name: row.print_name,
+     memo: row.memo,
+     quantity: row.quantity,
+     safety_quantity: row.safety_quantity,
+     purchase_price: row.purchase_price,
+     consumer_price: row.consumer_price,
+     supplier: row.supplier,
+     location: row.location,
+     barcode: row.barcode,
+     barcode_format: row.barcode_format,
+     weight: row.weight,
+     freight_amount: row.freight_amount,
+     spec: row.spec,
+     is_hidden: row.is_hidden,
+     registered_at: parseKoreanDate(row.registered_at),
+     updated_at: parseKoreanDate(row.updated_at)
+   });
 
   let insertedCount = 0;
   let updatedCount = 0;
@@ -242,31 +242,31 @@ async function uploadToSupabase() {
       const data = transformRow(row);
       const serial = data.serial_number;
 
-      // Check if product with this serial_number exists
-      const { data: existingData, error: checkError } = await supabase
-        .from("products")
-        .select("id")
-        .eq("serial_number", serial)
-        .single();
+       // Check if product with this serial_number exists
+       const { data: existingData, error: checkError } = await supabase
+         .from("products")
+         .select("id")
+         .eq("serial_number", serial);
 
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 means no rows returned
-        console.error("Error checking existing product:", checkError);
-        throw checkError;
-      }
+       if (checkError) {
+         console.error("Error checking existing product:", checkError);
+         throw checkError;
+       }
 
-      if (existingData) {
-        // Update existing
-        const { data: updateData, error: updateError } = await supabase
-          .from("products")
-          .update({
-            ...data,
-            updated_at: new Date().toISOString()
-          })
-          .eq("serial_number", serial);
+       // existingData is an array; check if any rows were returned
+       if (existingData && existingData.length > 0) {
+         // Update existing
+         const { data: updateData, error: updateError } = await supabase
+           .from("products")
+           .update({
+             ...data,
+             updated_at: new Date().toISOString()
+           })
+           .eq("serial_number", serial);
 
-        if (updateError) throw updateError;
-        updatedCount++;
-      } else {
+         if (updateError) throw updateError;
+         updatedCount++;
+       } else {
          // Insert new
          const { data: insertData, error: insertError } = await supabase
            .from("products")
