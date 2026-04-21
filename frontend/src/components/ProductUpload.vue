@@ -6,7 +6,7 @@
       <input type="file" accept=".xlsx, .xls" @change="handleFileSelect" ref="fileInput" />
       <div class="upload-hint">
         <p>엑셀 파일을 선택하거나 여기로 드래그하세요</p>
-        <p class="format-hint">Columns: 일련번호, 이미지URL, 관리코드, 관리상품명, 인쇄상품명, 메모, 사입처, 사입단가, 소비자가, 위치, 재고, 안전재고, 바코드, 바코드포멧, 무게, 운임금액, 규격, 등록일시, 수정일시, 숨김여부</p>
+        <p class="format-hint">컬럼: 일련번호, 이미지URL, 관리코드, 관리상품명, 인쇄상품명, 메모, 사입처, 사입단가, 소비자가, 위치, 재고, 안전재고, 바코드, 바코드포멧, 무게, 운임금액, 규격, 등록일시, 수정일시, 숨김여부</p>
       </div>
     </div>
 
@@ -120,30 +120,41 @@ function parseExcel(file) {
     const headers = jsonData[0] || [];
     const rows = jsonData.slice(1);
 
+    // [최적화] 헤더 인덱스를 미리 맵핑하여 매행 루프에서 findIndex 호출 방지
+    const headerMap = {};
+    headers.forEach((h, idx) => {
+      if (h) headerMap[String(h).trim()] = idx;
+    });
+
+    const getValue = (row, key) => {
+      const idx = headerMap[key];
+      return idx !== undefined ? row[idx] : null;
+    };
+
     previewData.value = rows
       .filter((row) => row.some((cell) => cell !== null && cell !== undefined && cell !== ""))
       .map((row) => {
         const item = {
-          serial_number: getCellValue(row, headers, "일련번호") ? Number(getCellValue(row, headers, "일련번호")) : (getCellValue(row, headers, "serial_number") ? Number(getCellValue(row, headers, "serial_number")) : null),
-          image_url: getCellValue(row, headers, "이미지URL") || getCellValue(row, headers, "image_url") || null,
-          manage_code: getCellValue(row, headers, "관리코드") || getCellValue(row, headers, "manage_code") || getCellValue(row, headers, "Manage Code") || "",
-          manage_name: getCellValue(row, headers, "관리상품명") || getCellValue(row, headers, "manage_name") || getCellValue(row, headers, "Product Name") || "",
-          print_name: getCellValue(row, headers, "인쇄상품명") || getCellValue(row, headers, "print_name") || getCellValue(row, headers, "Print Name") || null,
-          memo: getCellValue(row, headers, "메모") || getCellValue(row, headers, "memo") || null,
-          quantity: Number(getCellValue(row, headers, "재고")) || Number(getCellValue(row, headers, "quantity")) || Number(getCellValue(row, headers, "Qty")) || 0,
-          safety_quantity: Number(getCellValue(row, headers, "안전재고")) || Number(getCellValue(row, headers, "safety_quantity")) || 0,
-          purchase_price: Number(getCellValue(row, headers, "사입단가")) || Number(getCellValue(row, headers, "purchase_price")) || Number(getCellValue(row, headers, "Purchase Price")) || 0,
-          consumer_price: Number(getCellValue(row, headers, "소비자가")) || Number(getCellValue(row, headers, "consumer_price")) || Number(getCellValue(row, headers, "Consumer Price")) || 0,
-          supplier: getCellValue(row, headers, "사입처") || getCellValue(row, headers, "supplier") || getCellValue(row, headers, "Supplier") || null,
-          location: getCellValue(row, headers, "위치") || getCellValue(row, headers, "location") || getCellValue(row, headers, "Location") || null,
-          barcode: getCellValue(row, headers, "바코드") || getCellValue(row, headers, "barcode") || null,
-          barcode_format: getCellValue(row, headers, "바코드포멧") || getCellValue(row, headers, "barcode_format") || null,
-          weight: getCellValue(row, headers, "무게") || getCellValue(row, headers, "weight") || null,
-          freight_amount: getCellValue(row, headers, "운임금액") || getCellValue(row, headers, "freight_amount") || null,
-          spec: getCellValue(row, headers, "규격") || getCellValue(row, headers, "spec") || getCellValue(row, headers, "Spec") || null,
-          registered_at: getCellValue(row, headers, "등록일시") || getCellValue(row, headers, "registered_at") || null,
-          updated_at: getCellValue(row, headers, "수정일시") || getCellValue(row, headers, "updated_at") || null,
-          is_hidden: getCellValue(row, headers, "숨김여부") === "숨김" ? true : (getCellValue(row, headers, "is_hidden") === true || getCellValue(row, headers, "is_hidden") === "true" || getCellValue(row, headers, "is_hidden") === "true" ? true : false),
+          serial_number: getValue(row, "일련번호") ? Number(getValue(row, "일련번호")) : (getValue(row, "serial_number") ? Number(getValue(row, "serial_number")) : null),
+          image_url: getValue(row, "이미지URL") || getValue(row, "image_url") || null,
+          manage_code: getValue(row, "관리코드") || getValue(row, "manage_code") || getValue(row, "Manage Code") || "",
+          manage_name: getValue(row, "관리상품명") || getValue(row, "manage_name") || getValue(row, "Product Name") || "",
+          print_name: getValue(row, "인쇄상품명") || getValue(row, "print_name") || getValue(row, "Print Name") || null,
+          memo: getValue(row, "메모") || getValue(row, "memo") || null,
+          quantity: Number(getValue(row, "재고")) || Number(getValue(row, "quantity")) || Number(getValue(row, "Qty")) || 0,
+          safety_quantity: Number(getValue(row, "안전재고")) || Number(getValue(row, "safety_quantity")) || 0,
+          purchase_price: Number(getValue(row, "사입단가")) || Number(getValue(row, "purchase_price")) || Number(getValue(row, "Purchase Price")) || 0,
+          consumer_price: Number(getValue(row, "소비자가")) || Number(getValue(row, "consumer_price")) || Number(getValue(row, "Consumer Price")) || 0,
+          supplier: getValue(row, "사입처") || getValue(row, "supplier") || getValue(row, "Supplier") || null,
+          location: getValue(row, "위치") || getValue(row, "location") || getValue(row, "Location") || null,
+          barcode: getValue(row, "바코드") || getValue(row, "barcode") || null,
+          barcode_format: getValue(row, "바코드포멧") || getValue(row, "barcode_format") || null,
+          weight: getValue(row, "무게") || getValue(row, "weight") || null,
+          freight_amount: getValue(row, "운임금액") || getValue(row, "freight_amount") || null,
+          spec: getValue(row, "규격") || getValue(row, "spec") || getValue(row, "Spec") || null,
+          registered_at: getValue(row, "등록일시") || getValue(row, "registered_at") || null,
+          updated_at: getValue(row, "수정일시") || getValue(row, "updated_at") || null,
+          is_hidden: getValue(row, "숨김여부") === "숨김" ? true : (getValue(row, "is_hidden") === true || getValue(row, "is_hidden") === "true" || getValue(row, "is_hidden") === "true" ? true : false),
           errors: [],
         };
 
@@ -155,12 +166,6 @@ function parseExcel(file) {
       });
   };
   reader.readAsArrayBuffer(file);
-}
-
-function getCellValue(row, headers, key) {
-  const colIndex = headers.findIndex((h) => String(h).trim() === key);
-  if (colIndex === -1) return null;
-  return row[colIndex];
 }
 
 const hasErrors = computed(() => previewData.value.some((row) => row.errors?.length > 0));
@@ -228,23 +233,30 @@ async function uploadToSupabase() {
   }
 
   try {
-    // 1. 1,000개 단위로 청크(Chunk) 분할 (네트워크 안정성 확보)
+    // 1. 1,000개 단위로 청크(Chunk) 분할
     const chunkSize = 1000;
+    const uploadPromises = [];
+
     for (let i = 0; i < validRows.length; i += chunkSize) {
       const chunk = validRows.slice(i, i + chunkSize);
-
-      // 2. 단 한 번의 호출로 UPSERT 실행
-      // onConflict: 'serial_number' -> 이 컬럼이 겹치면 덮어써라!
-      const { error } = await supabase
-        .from("products")
-        .upsert(chunk, { 
-          onConflict: 'serial_number',
-          ignoreDuplicates: false // false면 덮어쓰기(Update), true면 무시
-        });
-
-      if (error) throw error;
-      console.log(`${i + chunk.length}개 처리 중...`);
+      
+      // [최적화] 모든 요청을 병렬로 실행하여 대기 시간 단축
+      uploadPromises.push(
+        supabase
+          .from("products")
+          .upsert(chunk, { 
+            onConflict: 'serial_number',
+            ignoreDuplicates: false 
+          })
+      );
     }
+
+    // 모든 병렬 요청 완료 대기
+    const results = await Promise.all(uploadPromises);
+    
+    // 에러 발생 여부 확인
+    const errors = results.filter(r => r.error).map(r => r.error);
+    if (errors.length > 0) throw errors[0];
 
     alert(`성공적으로 처리되었습니다! (총 ${validRows.length}건)`);
     previewData.value = [];
