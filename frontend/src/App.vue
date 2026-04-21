@@ -54,6 +54,16 @@
         </button>
       </div>
 
+      <!-- Search Input (Only visible when Search tab is active) -->
+      <div v-if="activeTab === '🔍 검색'" class="search-container">
+        <input 
+          v-model="searchQuery" 
+          placeholder="검색어 (관리코드 또는 상품명 일부 입력)" 
+          @keyup.enter="loadTab('🔍 검색', true)" 
+        />
+        <button @click="loadTab('🔍 검색', true)">검색</button>
+      </div>
+
       <!-- Products Table for Active Tab -->
       <div v-if="activeTab" class="table-wrapper">
         <table class="product-table">
@@ -197,7 +207,7 @@ function addToast(message) {
 
 const expandedGroups = ref(new Set()); // Group expansion state
 const tabProducts = ref({}); // Tab caching
-const activeTab = ref(null);
+const activeTab = ref('🔍 검색');
 const loadingTabs = ref(new Set());
 
 // Columns Setup
@@ -226,6 +236,8 @@ const defaultCols = {
 const columnVisibility = ref(defaultCols);
 
 onMounted(() => {
+  selectTab('🔍 검색');
+
   const saved = localStorage.getItem('columnVisibility');
   if (saved) {
     try {
@@ -249,9 +261,9 @@ const visibleColCount = computed(() => {
   return Object.values(columnVisibility.value).filter(c => c.visible).length;
 });
 
-// Tab keys: A-Z plus # for others
+// Tab keys: Search, A-Z plus # for others
 function allTabs() {
-  const tabs = [];
+  const tabs = ['🔍 검색'];
   for (let i = 65; i <= 90; i++) { // A-Z
     tabs.push(String.fromCharCode(i));
   }
@@ -259,9 +271,16 @@ function allTabs() {
   return tabs;
 }
 
+const searchQuery = ref('');
+
 // Load products for a given tab (first letter)
-async function loadTab(tab) {
-  if (tabProducts.value[tab] || loadingTabs.value.has(tab)) return;
+async function loadTab(tab, forceSearch = false) {
+  if (tab === '🔍 검색' && !forceSearch) {
+    if (!tabProducts.value[tab]) tabProducts.value[tab] = [];
+    return;
+  }
+
+  if (!forceSearch && (tabProducts.value[tab] || loadingTabs.value.has(tab))) return;
   loadingTabs.value.add(tab);
   try {
     let query = supabase
@@ -270,7 +289,10 @@ async function loadTab(tab) {
       .eq('is_deleted', false)
       .order('manage_code', { ascending: true }); // Ascending order
       
-    if (tab === '#') {
+    if (tab === '🔍 검색') {
+      const term = `%${searchQuery.value.trim()}%`;
+      query = query.or(`manage_code.ilike.${term},manage_name.ilike.${term}`);
+    } else if (tab === '#') {
        query = query.or('manage_code.is.null,manage_code.eq.,manage_code.like.0%,manage_code.like.1%,manage_code.like.2%,manage_code.like.3%,manage_code.like.4%,manage_code.like.5%,manage_code.like.6%,manage_code.like.7%,manage_code.like.8%,manage_code.like.9%,manage_code.like.[%,manage_code.like.(%,manage_code.like.-%');
     } else {
        query = query.ilike('manage_code', `${tab}%`);
@@ -515,6 +537,32 @@ nav button { padding: 10px 20px; background: #1976d2; color: white; border: none
 @keyframes blink {
   0%, 50% { opacity: 0; }
   51%, 100% { opacity: 1; }
+}
+
+.search-container {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  background: #fdfdfd;
+  padding: 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+.search-container input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+}
+.search-container button {
+  padding: 10px 24px;
+  background: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
 }
 
 .loading-message {
