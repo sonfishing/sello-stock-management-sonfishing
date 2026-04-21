@@ -46,172 +46,190 @@
           </tr>
         </thead>
         <tbody>
-          <template v-for="product in displayedProducts" :key="product.id">
-            <!-- Main Row (always visible) -->
-            <tr class="main-row" @click="toggleExpand(product.id)" :class="{ 'deleted-row': product.is_deleted }">
+          <template v-for="group in groupedProducts" :key="group.id">
+            <!-- Group Row -->
+            <tr class="group-row" @click="toggleGroup(group.prefix)">
               <td style="text-align: center;">
-                <span class="expand-icon">{{ expandedIds.has(product.id) ? '▼' : '▶' }}</span>
+                <span class="expand-icon">{{ expandedGroups.has(group.prefix) ? '▼' : '▶' }}</span>
               </td>
-              <td>{{ product.manage_code }}</td>
-              <td>{{ product.manage_name }}</td>
-              <td>
-                <input 
-                  type="number" 
-                  :value="product.quantity" 
-                  @input="updateField(product.id, 'quantity', $event.target.valueAsNumber)"
-                  @click.stop
-                  class="inline-input"
-                />
-              </td>
-              <td>{{ formatDate(product.updated_at) }}</td>
-              <td @click.stop>
-              </td>
+              <td><strong>{{ group.prefix }}</strong></td>
+              <td><strong>{{ group.name }}</strong></td>
+              <td></td>
+              <td></td>
+              <td></td>
             </tr>
-            <!-- Expanded Detail Row -->
-            <tr v-if="expandedIds.has(product.id)" class="detail-row">
-              <td colspan="6">
-                <div class="detail-content">
-                  <div class="detail-grid">
-                    <div class="detail-field">
-                      <label>일련번호</label>
-                      <input 
-                        type="number" 
-                        :value="product.serial_number" 
-                        @change="updateField(product.id, 'serial_number', $event.target.valueAsNumber)"
-                      />
+
+            <!-- Items in Group -->
+            <template v-if="expandedGroups.has(group.prefix)">
+              <template v-for="(product, idx) in group.items" :key="product.id">
+                <!-- Main Row -->
+                <tr class="main-row item-row" @click="toggleExpand(product.id)" :class="{ 'deleted-row': product.is_deleted }">
+                  <td style="text-align: right; padding-right: 10px; color: #888;">
+                     <span style="font-size: 11px;">{{ idx + 1 }}</span>
+                     <span class="expand-icon" style="margin-left:5px;">{{ expandedIds.has(product.id) ? '▼' : '▶' }}</span>
+                  </td>
+                  <td>{{ product.manage_code }}</td>
+                  <td>{{ product.manage_name }}</td>
+                  <td>
+                    <input 
+                      type="number" 
+                      :value="product.quantity" 
+                      @input="updateField(product.id, 'quantity', $event.target.valueAsNumber)"
+                      @click.stop
+                      class="inline-input"
+                    />
+                  </td>
+                  <td>{{ formatDate(product.updated_at) }}</td>
+                  <td @click.stop>
+                  </td>
+                </tr>
+                <!-- Expanded Detail Row -->
+                <tr v-if="expandedIds.has(product.id)" class="detail-row">
+                  <td colspan="6">
+                    <div class="detail-content">
+                      <div class="detail-grid">
+                        <div class="detail-field">
+                          <label>일련번호</label>
+                          <input 
+                            type="number" 
+                            :value="product.serial_number" 
+                            @change="updateField(product.id, 'serial_number', $event.target.valueAsNumber)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>이미지URL</label>
+                          <input 
+                            type="text" 
+                            :value="product.image_url" 
+                            @change="updateField(product.id, 'image_url', $event.target.value)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>인쇄상품명</label>
+                          <input 
+                            type="text" 
+                            :value="product.print_name" 
+                            @change="updateField(product.id, 'print_name', $event.target.value)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>메모</label>
+                          <input 
+                            type="text" 
+                            :value="product.memo" 
+                            @change="updateField(product.id, 'memo', $event.target.value)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>사입처</label>
+                          <input 
+                            type="text" 
+                            :value="product.supplier" 
+                            @change="updateField(product.id, 'supplier', $event.target.value)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>사입단가</label>
+                          <input 
+                            type="number" 
+                            :value="product.purchase_price" 
+                            @change="updateField(product.id, 'purchase_price', $event.target.valueAsNumber)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>소비자가</label>
+                          <input 
+                            type="number" 
+                            :value="product.consumer_price" 
+                            @change="updateField(product.id, 'consumer_price', $event.target.valueAsNumber)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>위치</label>
+                          <input 
+                            type="text" 
+                            :value="product.location" 
+                            @change="updateField(product.id, 'location', $event.target.value)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>안전재고</label>
+                          <input 
+                            type="number" 
+                            :value="product.safety_quantity" 
+                            @change="updateField(product.id, 'safety_quantity', $event.target.valueAsNumber)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>바코드</label>
+                          <input 
+                            type="text" 
+                            :value="product.barcode" 
+                            @change="updateField(product.id, 'barcode', $event.target.value)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>바코드포멧</label>
+                          <input 
+                            type="text" 
+                            :value="product.barcode_format" 
+                            @change="updateField(product.id, 'barcode_format', $event.target.value)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>무게</label>
+                          <input 
+                            type="text" 
+                            :value="product.weight" 
+                            @change="updateField(product.id, 'weight', $event.target.value)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>운임금액</label>
+                          <input 
+                            type="text" 
+                            :value="product.freight_amount" 
+                            @change="updateField(product.id, 'freight_amount', $event.target.value)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>규격</label>
+                          <input 
+                            type="text" 
+                            :value="product.spec" 
+                            @change="updateField(product.id, 'spec', $event.target.value)"
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>등록일시</label>
+                          <input 
+                            type="text" 
+                            :value="formatDate(product.registered_at)" 
+                            disabled
+                          />
+                        </div>
+                        <div class="detail-field">
+                          <label>숨김여부</label>
+                          <select 
+                            :value="product.is_hidden ? 'true' : 'false'" 
+                            @change="updateField(product.id, 'is_hidden', $event.target.value === 'true')"
+                          >
+                            <option value="false">노출</option>
+                            <option value="true">숨김</option>
+                          </select>
+                        </div>
+                        <div class="detail-field delete-action">
+                          <label>관리</label>
+                          <button @click="deleteProduct(product.id)" class="delete-btn" title="삭제">
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div class="detail-field">
-                      <label>이미지URL</label>
-                      <input 
-                        type="text" 
-                        :value="product.image_url" 
-                        @change="updateField(product.id, 'image_url', $event.target.value)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>인쇄상품명</label>
-                      <input 
-                        type="text" 
-                        :value="product.print_name" 
-                        @change="updateField(product.id, 'print_name', $event.target.value)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>메모</label>
-                      <input 
-                        type="text" 
-                        :value="product.memo" 
-                        @change="updateField(product.id, 'memo', $event.target.value)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>사입처</label>
-                      <input 
-                        type="text" 
-                        :value="product.supplier" 
-                        @change="updateField(product.id, 'supplier', $event.target.value)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>사입단가</label>
-                      <input 
-                        type="number" 
-                        :value="product.purchase_price" 
-                        @change="updateField(product.id, 'purchase_price', $event.target.valueAsNumber)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>소비자가</label>
-                      <input 
-                        type="number" 
-                        :value="product.consumer_price" 
-                        @change="updateField(product.id, 'consumer_price', $event.target.valueAsNumber)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>위치</label>
-                      <input 
-                        type="text" 
-                        :value="product.location" 
-                        @change="updateField(product.id, 'location', $event.target.value)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>안전재고</label>
-                      <input 
-                        type="number" 
-                        :value="product.safety_quantity" 
-                        @change="updateField(product.id, 'safety_quantity', $event.target.valueAsNumber)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>바코드</label>
-                      <input 
-                        type="text" 
-                        :value="product.barcode" 
-                        @change="updateField(product.id, 'barcode', $event.target.value)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>바코드포멧</label>
-                      <input 
-                        type="text" 
-                        :value="product.barcode_format" 
-                        @change="updateField(product.id, 'barcode_format', $event.target.value)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>무게</label>
-                      <input 
-                        type="text" 
-                        :value="product.weight" 
-                        @change="updateField(product.id, 'weight', $event.target.value)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>운임금액</label>
-                      <input 
-                        type="text" 
-                        :value="product.freight_amount" 
-                        @change="updateField(product.id, 'freight_amount', $event.target.value)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>규격</label>
-                      <input 
-                        type="text" 
-                        :value="product.spec" 
-                        @change="updateField(product.id, 'spec', $event.target.value)"
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>등록일시</label>
-                      <input 
-                        type="text" 
-                        :value="formatDate(product.registered_at)" 
-                        disabled
-                      />
-                    </div>
-                    <div class="detail-field">
-                      <label>숨김여부</label>
-                      <select 
-                        :value="product.is_hidden ? 'true' : 'false'" 
-                        @change="updateField(product.id, 'is_hidden', $event.target.value === 'true')"
-                      >
-                        <option value="false">노출</option>
-                        <option value="true">숨김</option>
-                      </select>
-                    </div>
-                    <div class="detail-field delete-action">
-                      <label>관리</label>
-                      <button @click="deleteProduct(product.id)" class="delete-btn" title="삭제">
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </td>
-            </tr>
+                  </td>
+                </tr>
+              </template>
+            </template>
           </template>
         </tbody>
       </table>
@@ -239,6 +257,7 @@ const newProduct = ref({
 });
 const currentView = ref("list");
 const expandedIds = ref(new Set());
+const expandedGroups = ref(new Set()); // 추가: 그룹 확장 상태 관리
 // Tab caching: key = first letter (A-Z or #), value = array of products
 const tabProducts = ref({});
 const activeTab = ref(null);
@@ -265,7 +284,7 @@ async function loadTab(tab) {
       .select("*")
       .ilike('manage_code', `${tab}%`)
       .eq('is_deleted', false)
-      .order('manage_code', { ascending: false });
+      .order('manage_code', { ascending: true }); // 오름차순으로 변경
     if (error) throw error;
     tabProducts.value[tab] = data;
   } finally {
@@ -273,10 +292,45 @@ async function loadTab(tab) {
   }
 }
 
-// Get products for active tab (empty array if none)
-const displayedProducts = computed(() => {
-  return tabProducts.value[activeTab.value] || [];
+// Get grouped products for active tab
+const groupedProducts = computed(() => {
+  const products = tabProducts.value[activeTab.value] || [];
+  const groupsMap = new Map();
+  const result = [];
+
+  products.forEach(product => {
+    const code = product.manage_code || '';
+    const parts = code.split('-');
+    const prefix = parts[0];
+
+    if (!groupsMap.has(prefix)) {
+      // 대표명 추출: "[과호] 이름 : 옵션" -> "이름"
+      let baseName = product.manage_name || '';
+      baseName = baseName.replace(/\[.*?\]\s*/, '').split(':')[0].trim();
+
+      const newGroup = {
+        id: `group-${prefix}`,
+        prefix: prefix,
+        name: baseName,
+        items: []
+      };
+      groupsMap.set(prefix, newGroup);
+      result.push(newGroup);
+    }
+    groupsMap.get(prefix).items.push(product);
+  });
+
+  return result;
 });
+
+function toggleGroup(prefix) {
+  if (expandedGroups.value.has(prefix)) {
+    expandedGroups.value.delete(prefix);
+  } else {
+    expandedGroups.value.add(prefix);
+  }
+  expandedGroups.value = new Set(expandedGroups.value);
+}
 
 function toggleExpand(id) {
   if (expandedIds.value.has(id)) {
@@ -349,11 +403,11 @@ async function addProduct() {
     const firstChar = code[0].toUpperCase();
     const tab = /[A-Z]/.test(firstChar) ? firstChar : '#';
     if (tabProducts.value[tab]) {
-      // Insert and keep sorted descending by manage_code
+      // Insert and keep sorted ascending by manage_code
       tabProducts.value[tab].push(insertedProduct[0]);
       tabProducts.value[tab].sort((a, b) => {
-        if (a.manage_code < b.manage_code) return 1;
-        if (a.manage_code > b.manage_code) return -1;
+        if (a.manage_code < b.manage_code) return -1;
+        if (a.manage_code > b.manage_code) return 1;
         return 0;
       });
     }
@@ -485,6 +539,13 @@ nav button { padding: 10px 20px; background: #1976d2; color: white; border: none
   box-sizing: border-box;
 }
 .detail-field input:disabled { background: #eee; }
+
+.group-row { cursor: pointer; background: #eaeff5; }
+.group-row td { border-top: 2px solid #ccc; }
+.group-row:hover { background: #dce4f0; }
+
+.item-row { background: #ffffff; }
+.item-row td { color: #555; }
 
 .inline-input {
   width: 80px;
