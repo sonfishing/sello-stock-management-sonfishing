@@ -515,7 +515,7 @@ async function addProduct() {
   const now = new Date().toISOString();
   const { data: insertedProduct, error } = await supabase.from("products").insert([{
     ...newProduct.value,
-    manage_name: newProduct.value.manage_name || 'Untitled',
+    manage_name: newProduct.value.manage_name || '제목 없음',
     registered_at: now,
     updated_at: now
   }]);

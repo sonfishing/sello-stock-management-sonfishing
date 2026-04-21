@@ -148,7 +148,7 @@ function parseExcel(file) {
         };
 
         if (!item.manage_name) {
-          item.errors.push("Product name is required");
+          item.errors.push("상품명은 필수입니다");
         }
 
         return item;
