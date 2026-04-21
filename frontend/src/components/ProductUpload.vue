@@ -173,44 +173,24 @@ const errorSummary = computed(() => {
   return Array.from(errors);
 });
 
-async function uploadToSupabase() {
-  if (hasErrors.value) return;
-
-  isUploading.value = true;
-  const rowsWithErrors = previewData.value.filter((row) => row.errors?.length);
-  const rowsWithoutErrors = previewData.value.filter((row) => !row.errors?.length);
-
-  // Separate rows with and without serial_number
-  const rowsWithSerial = [];
-  const rowsWithoutSerial = [];
-  rowsWithoutErrors.forEach(row => {
-    const serial = row.serial_number;
-    if (serial !== null && serial !== undefined && serial !== '' && !isNaN(Number(serial))) {
-      rowsWithSerial.push(row);
-    } else {
-      rowsWithoutSerial.push(row);
-    }
-  });
-
-  // Helper function to parse Korean date format
-  function parseKoreanDate(dateStr) {
-    if (!dateStr) return null;
-    try {
-      // Handle Korean format: "2026-04-03 오전 11:54:54" or "2026-03-06 오후 10:59:17"
-      let cleanStr = String(dateStr).trim();
-      // Replace Korean AM/PM
-      cleanStr = cleanStr.replace('오전', 'AM').replace('오후', 'PM');
-      const date = new Date(cleanStr);
-      if (isNaN(date.getTime())) return null;
-      return date.toISOString();
-    } catch {
-      return null;
-    }
+// Helper function to parse Korean date format
+function parseKoreanDate(dateStr) {
+  if (!dateStr) return null;
+  try {
+    let cleanStr = String(dateStr).trim();
+    cleanStr = cleanStr.replace('오전', 'AM').replace('오후', 'PM');
+    const date = new Date(cleanStr);
+    if (isNaN(date.getTime())) return null;
+    return date.toISOString();
+  } catch {
+    return null;
   }
+}
 
-  // Transform data to match Supabase schema (exclude 'errors' field)
-  const transformRow = (row) => ({
-    serial_number: Number(row.serial_number),
+// Transform row data for Supabase
+function transformRow(row) {
+  return {
+    serial_number: row.serial_number ? Number(row.serial_number) : null,
     image_url: row.image_url,
     manage_code: row.manage_code,
     manage_name: row.manage_name,
@@ -229,80 +209,48 @@ async function uploadToSupabase() {
     spec: row.spec,
     is_hidden: row.is_hidden,
     registered_at: parseKoreanDate(row.registered_at),
-    updated_at: parseKoreanDate(row.updated_at)
-  });
+    updated_at: new Date().toISOString()
+  };
+}
 
-  let insertedCount = 0;
-  let updatedCount = 0;
-  let skippedCount = rowsWithoutSerial.length + rowsWithErrors.length;
-  const now = new Date().toISOString();
+async function uploadToSupabase() {
+  if (hasErrors.value) return;
+  isUploading.value = true;
+
+  // 에러 없는 데이터만 필터링 및 변환
+  const validRows = previewData.value
+    .filter((row) => !row.errors?.length && row.serial_number)
+    .map(transformRow);
+
+  if (validRows.length === 0) {
+    isUploading.value = false;
+    return;
+  }
 
   try {
-    if (rowsWithSerial.length > 0) {
-      // Step 1: Get ALL existing serial_numbers in one query
-      const serialsToCheck = rowsWithSerial.map(r => r.serial_number);
-      const { data: existingProducts, error: fetchError } = await supabase
+    // 1. 1,000개 단위로 청크(Chunk) 분할 (네트워크 안정성 확보)
+    const chunkSize = 1000;
+    for (let i = 0; i < validRows.length; i += chunkSize) {
+      const chunk = validRows.slice(i, i + chunkSize);
+
+      // 2. 단 한 번의 호출로 UPSERT 실행
+      // onConflict: 'serial_number' -> 이 컬럼이 겹치면 덮어써라!
+      const { error } = await supabase
         .from("products")
-        .select("serial_number")
-        .in("serial_number", serialsToCheck);
+        .upsert(chunk, { 
+          onConflict: 'serial_number',
+          ignoreDuplicates: false // false면 덮어쓰기(Update), true면 무시
+        });
 
-      if (fetchError) throw fetchError;
-
-      const existingSerials = new Set(existingProducts?.map(p => p.serial_number) || []);
-
-      // Step 2: Separate rows into update vs insert batches
-      const rowsToUpdate = [];
-      const rowsToInsert = [];
-
-      rowsWithSerial.forEach(row => {
-        const data = transformRow(row);
-        data.updated_at = now;
-        if (existingSerials.has(data.serial_number)) {
-          rowsToUpdate.push(data);
-        } else {
-          rowsToInsert.push(data);
-        }
-      });
-
-      // Step 3: Bulk insert new rows (if any)
-      if (rowsToInsert.length > 0) {
-        const { error: insertError } = await supabase
-          .from("products")
-          .insert(rowsToInsert);
-
-        if (insertError) throw insertError;
-        insertedCount = rowsToInsert.length;
-      }
-
-      // Step 4: Bulk update existing rows (process in batches of 100)
-      if (rowsToUpdate.length > 0) {
-        const batchSize = 100;
-        for (let i = 0; i < rowsToUpdate.length; i += batchSize) {
-          const batch = rowsToUpdate.slice(i, i + batchSize);
-          const serials = batch.map(b => b.serial_number);
-
-          // Update all rows in batch where serial_number matches
-          const { error: updateError } = await supabase
-            .from("products")
-            .upsert(batch, { onConflict: 'serial_number', defaultValues: { updated_at: now } });
-
-          if (updateError) throw updateError;
-        }
-        updatedCount = rowsToUpdate.length;
-      }
+      if (error) throw error;
+      console.log(`${i + chunk.length}개 처리 중...`);
     }
 
-    // Prepare message
-    let message = `Processed: ${insertedCount} inserted, ${updatedCount} updated`;
-    if (skippedCount > 0) {
-      message += `, ${skippedCount} skipped (missing or invalid serial number)`;
-    }
-    alert(message);
-
+    alert(`성공적으로 처리되었습니다! (총 ${validRows.length}건)`);
     previewData.value = [];
   } catch (error) {
     console.error("Upload error:", error);
-    alert(`Upload failed: ${error.message}`);
+    alert(`실패: ${error.message}`);
   } finally {
     isUploading.value = false;
   }
