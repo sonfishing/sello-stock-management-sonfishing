@@ -139,7 +139,7 @@
 
               <!-- Flat Item Row -->
               <template v-else>
-                <tr class="item-row" :key="node.product.id" :style="{ backgroundColor: node.color || '#fff' }">
+                <tr class="item-row single-item-row" :key="node.product.id" :style="{ backgroundColor: node.color || '#fff' }">
                   <td :style="{ backgroundColor: node.color || '#fff', textAlign: 'center', color: '#888', fontSize: '11px', position: 'sticky', left: 0, zIndex: 1, borderRight: '1px solid #ddd' }">
                     -
                   </td>
@@ -616,6 +616,12 @@ nav button { padding: 10px 20px; background: #1976d2; color: white; border: none
 
 .item-row { background: #ffffff; }
 .item-row:focus-within { background: #fdfcee; }
+
+/* Single items outside groups */
+.single-item-row td {
+  border-top: 2px solid #bbb;
+  border-bottom: 2px solid #bbb;
+}
 
 /* The new full-width input style */
 .full-input {
