@@ -218,7 +218,7 @@
 
       <!-- Loading indicator when no tab active or loading -->
       <div v-else class="loading-message">
-        Loading products...
+        Select a tab to view products
       </div>
     </div>
 
@@ -449,10 +449,6 @@ async function loadTab(tab) {
       .order('manage_code', { ascending: false });
     if (error) throw error;
     tabProducts.value[tab] = data;
-    // If this is the first tab loaded, set as active
-    if (!activeTab.value) {
-      activeTab.value = tab;
-    }
   } finally {
     loadingTabs.value.delete(tab);
   }
@@ -580,10 +576,7 @@ function selectTab(tab) {
   loadTab(tab);
 }
 
-onMounted(() => {
-  // Load first tab (A) by default
-  loadTab('A');
-});
+// No initial tab load; user must select a tab to see products
 </script>
 
 <style>
