@@ -288,13 +288,9 @@ async function loadTab(tab) {
 const groupedProducts = computed(() => {
   const products = tabProducts.value[activeTab.value] || [];
   
-  if (!isGroupView.value) {
-    // If flat list view
-    return products.map(p => ({ isItem: true, product: p }));
-  }
-
   const groupsMap = new Map();
-  const result = [];
+  const pastelColors = ['#ffebeb', '#fff3e6', '#fffae6', '#ecfced', '#e6f7ff', '#f0f0ff', '#f9f0ff'];
+  let colorIdx = 0;
 
   products.forEach(product => {
     const code = product.manage_code || '';
@@ -304,30 +300,38 @@ const groupedProducts = computed(() => {
     if (!groupsMap.has(prefix)) {
       let baseName = product.manage_name || '';
       baseName = baseName.replace(/\[.*?\]\s*/, '').split(':')[0].trim();
+      const color = pastelColors[colorIdx % pastelColors.length];
+      colorIdx++;
 
       const newGroup = {
         isGroup: true,
         id: `group-${prefix}`,
         prefix: prefix,
         name: baseName,
-        items: []
+        items: [],
+        color: color
       };
       groupsMap.set(prefix, newGroup);
     }
     groupsMap.get(prefix).items.push(product);
   });
 
-  const pastelColors = ['#ffebeb', '#fff3e6', '#fffae6', '#ecfced', '#e6f7ff', '#f0f0ff', '#f9f0ff'];
-  let colorIdx = 0;
+  const result = [];
+
+  if (!isGroupView.value) {
+    // Flat list mode with colors
+    products.forEach(product => {
+      const prefix = (product.manage_code || '').split('-')[0];
+      const color = groupsMap.get(prefix).color;
+      result.push({ isItem: true, product: product, color: color });
+    });
+    return result;
+  }
 
   groupsMap.forEach(group => {
-    const color = pastelColors[colorIdx % pastelColors.length];
-    colorIdx++;
-    group.color = color;
-    
     // Single items are not grouped
     if (group.items.length === 1) {
-      result.push({ isItem: true, product: group.items[0], color });
+      result.push({ isItem: true, product: group.items[0], color: group.color });
     } else {
       result.push(group);
     }
