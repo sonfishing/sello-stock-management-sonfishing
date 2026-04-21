@@ -428,9 +428,61 @@ function isEditing(r, c) {
   return editingCell.value && editingCell.value.r === r && editingCell.value.c === c;
 }
 
-// Global key handlers for Copy
+// Global key handlers for Copy and Delete
 function handleGlobalKeydown(e) {
   if (editingCell.value) return; // Native logic
+  
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (!selStart.value || !selEnd.value) return;
+      
+      const rMin = Math.min(selStart.value.r, selEnd.value.r);
+      const rMax = Math.max(selStart.value.r, selEnd.value.r);
+      const cMin = Math.min(selStart.value.c, selEnd.value.c);
+      const cMax = Math.max(selStart.value.c, selEnd.value.c);
+      
+      const itemsOnly = itemsOnlyGrid.value;
+      const promises = [];
+      let updateCount = 0;
+      
+      for (let r = rMin; r <= rMax; r++) {
+         if (r >= itemsOnly.length) break;
+         const product = itemsOnly[r].product;
+         const updates = {};
+         let changed = false;
+         
+         for (let c = cMin; c <= cMax; c++) {
+            const key = visibleColsKeys.value[c];
+            if (key === 'updated_at') continue;
+            
+            let emptyVal = '';
+            if (defaultCols[key].type === 'number') {
+               emptyVal = 0;
+            } else if (key === 'is_hidden') {
+               emptyVal = false;
+            }
+            
+            if (product[key] !== emptyVal) {
+               product[key] = emptyVal;
+               updates[key] = emptyVal;
+               changed = true;
+            }
+         }
+         
+         if (changed) {
+            updates.updated_at = new Date().toISOString();
+            promises.push(supabase.from('products').update(updates).eq('id', product.id));
+            updateCount++;
+         }
+      }
+      
+      if (updateCount > 0) {
+         addToast(`${updateCount}개 데이터 삭제 반영 중...`);
+         Promise.all(promises).then(() => {
+            addToast('삭제 반영 완료');
+         });
+      }
+      return;
+  }
   
   if (e.key.toLowerCase() === 'c' && (e.ctrlKey || e.metaKey)) {
       if (!selStart.value || !selEnd.value) return;
