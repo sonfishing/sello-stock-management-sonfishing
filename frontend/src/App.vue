@@ -16,6 +16,14 @@
         </label>
       </div>
       
+      <!-- Field Visibility Checklist -->
+      <div class="column-visibility-container">
+        <strong>표시 항목: </strong>
+        <label v-for="(col, key) in columnVisibility" :key="key" class="vis-label">
+          <input type="checkbox" v-model="col.visible" /> {{ col.label }}
+        </label>
+      </div>
+
       <div class="add-product">
         <h2>새 상품 추가</h2>
         <input v-model="newProduct.manage_code" placeholder="관리 코드" />
@@ -45,25 +53,25 @@
           <thead>
             <tr>
               <th style="min-width: 50px; position: sticky; left: 0; z-index: 2; background: #f5f5f5;">No</th>
-              <th style="min-width: 120px">관리코드</th>
-              <th style="min-width: 250px">관리상품명</th>
-              <th style="min-width: 250px">인쇄상품명</th>
-              <th style="min-width: 250px">메모</th>
-              <th style="min-width: 80px">재고</th>
-              <th style="min-width: 80px">안전재고</th>
-              <th style="min-width: 120px">사입처</th>
-              <th style="min-width: 100px">사입단가</th>
-              <th style="min-width: 100px">소비자가</th>
-              <th style="min-width: 120px">위치</th>
-              <th style="min-width: 120px">바코드</th>
-              <th style="min-width: 100px">바코드포멧</th>
-              <th style="min-width: 80px">무게</th>
-              <th style="min-width: 100px">운임금액</th>
-              <th style="min-width: 100px">규격</th>
-              <th style="min-width: 100px">일련번호</th>
-              <th style="min-width: 150px">이미지URL</th>
-              <th style="min-width: 80px">숨김여부</th>
-              <th style="min-width: 150px">수정일시</th>
+              <th v-if="columnVisibility.manage_code.visible" style="min-width: 120px">관리코드</th>
+              <th v-if="columnVisibility.manage_name.visible" style="min-width: 250px">관리상품명</th>
+              <th v-if="columnVisibility.print_name.visible" style="min-width: 250px">인쇄상품명</th>
+              <th v-if="columnVisibility.memo.visible" style="min-width: 250px">메모</th>
+              <th v-if="columnVisibility.quantity.visible" style="min-width: 80px">재고</th>
+              <th v-if="columnVisibility.safety_quantity.visible" style="min-width: 80px">안전재고</th>
+              <th v-if="columnVisibility.supplier.visible" style="min-width: 120px">사입처</th>
+              <th v-if="columnVisibility.purchase_price.visible" style="min-width: 100px">사입단가</th>
+              <th v-if="columnVisibility.consumer_price.visible" style="min-width: 100px">소비자가</th>
+              <th v-if="columnVisibility.location.visible" style="min-width: 120px">위치</th>
+              <th v-if="columnVisibility.barcode.visible" style="min-width: 120px">바코드</th>
+              <th v-if="columnVisibility.barcode_format.visible" style="min-width: 100px">바코드포멧</th>
+              <th v-if="columnVisibility.weight.visible" style="min-width: 80px">무게</th>
+              <th v-if="columnVisibility.freight_amount.visible" style="min-width: 100px">운임금액</th>
+              <th v-if="columnVisibility.spec.visible" style="min-width: 100px">규격</th>
+              <th v-if="columnVisibility.serial_number.visible" style="min-width: 100px">일련번호</th>
+              <th v-if="columnVisibility.image_url.visible" style="min-width: 150px">이미지URL</th>
+              <th v-if="columnVisibility.is_hidden.visible" style="min-width: 80px">숨김여부</th>
+              <th v-if="columnVisibility.updated_at.visible" style="min-width: 150px">수정일시</th>
             </tr>
           </thead>
           <tbody>
@@ -74,40 +82,40 @@
                   <td style="text-align: center; position: sticky; left: 0; background: #eaeff5; z-index: 1; border-right: 1px solid #ddd;">
                     <span class="expand-icon">{{ expandedGroups.has(node.prefix) ? '▼' : '▶' }}</span>
                   </td>
-                  <td><strong>{{ node.prefix }}</strong></td>
-                  <td colspan="18"><strong>{{ node.name }}</strong></td>
+                  <td v-if="columnVisibility.manage_code.visible"><strong>{{ node.prefix }}</strong></td>
+                  <td :colspan="visibleColCount - (columnVisibility.manage_code.visible ? 1 : 0)"><strong>{{ node.name }}</strong></td>
                 </tr>
 
                 <!-- Items in Group -->
                 <template v-if="expandedGroups.has(node.prefix)">
                   <tr v-for="(product, idx) in node.items" :key="product.id" class="item-row">
-                    <td style="text-align: center; color: #888; font-size: 11px; position: sticky; left: 0; background: #fff; z-index: 1; border-right: 1px solid #ddd;">
+                     <td style="text-align: center; color: #888; font-size: 11px; position: sticky; left: 0; background: #fff; z-index: 1; border-right: 1px solid #ddd;">
                       {{ idx + 1 }}
                     </td>
-                    <td><input class="short-input" :value="product.manage_code" @change="updateField(product.id, 'manage_code', $event.target.value)" /></td>
-                    <td><input class="long-input" :value="product.manage_name" @change="updateField(product.id, 'manage_name', $event.target.value)" /></td>
-                    <td><input class="long-input" :value="product.print_name" @change="updateField(product.id, 'print_name', $event.target.value)" /></td>
-                    <td><input class="long-input" :value="product.memo" @change="updateField(product.id, 'memo', $event.target.value)" /></td>
-                    <td><input class="short-input" type="number" :value="product.quantity" @change="updateField(product.id, 'quantity', $event.target.valueAsNumber)" /></td>
-                    <td><input class="short-input" type="number" :value="product.safety_quantity" @change="updateField(product.id, 'safety_quantity', $event.target.valueAsNumber)" /></td>
-                    <td><input class="short-input" :value="product.supplier" @change="updateField(product.id, 'supplier', $event.target.value)" /></td>
-                    <td><input class="short-input" type="number" :value="product.purchase_price" @change="updateField(product.id, 'purchase_price', $event.target.valueAsNumber)" /></td>
-                    <td><input class="short-input" type="number" :value="product.consumer_price" @change="updateField(product.id, 'consumer_price', $event.target.valueAsNumber)" /></td>
-                    <td><input class="short-input" :value="product.location" @change="updateField(product.id, 'location', $event.target.value)" /></td>
-                    <td><input class="short-input" :value="product.barcode" @change="updateField(product.id, 'barcode', $event.target.value)" /></td>
-                    <td><input class="short-input" :value="product.barcode_format" @change="updateField(product.id, 'barcode_format', $event.target.value)" /></td>
-                    <td><input class="short-input" :value="product.weight" @change="updateField(product.id, 'weight', $event.target.value)" /></td>
-                    <td><input class="short-input" :value="product.freight_amount" @change="updateField(product.id, 'freight_amount', $event.target.value)" /></td>
-                    <td><input class="short-input" :value="product.spec" @change="updateField(product.id, 'spec', $event.target.value)" /></td>
-                    <td><input class="short-input" type="number" :value="product.serial_number" @change="updateField(product.id, 'serial_number', $event.target.valueAsNumber)" /></td>
-                    <td><input class="short-input" :value="product.image_url" @change="updateField(product.id, 'image_url', $event.target.value)" /></td>
-                    <td>
-                      <select class="short-input" style="width:70px;" :value="product.is_hidden ? 'true' : 'false'" @change="updateField(product.id, 'is_hidden', $event.target.value === 'true')">
+                    <td v-if="columnVisibility.manage_code.visible"><input class="full-input" :value="product.manage_code" @change="updateField(product.id, 'manage_code', $event.target.value)" /></td>
+                    <td v-if="columnVisibility.manage_name.visible"><input class="full-input" :value="product.manage_name" @change="updateField(product.id, 'manage_name', $event.target.value)" /></td>
+                    <td v-if="columnVisibility.print_name.visible"><input class="full-input" :value="product.print_name" @change="updateField(product.id, 'print_name', $event.target.value)" /></td>
+                    <td v-if="columnVisibility.memo.visible"><input class="full-input" :value="product.memo" @change="updateField(product.id, 'memo', $event.target.value)" /></td>
+                    <td v-if="columnVisibility.quantity.visible"><input class="full-input" type="number" :value="product.quantity" @change="updateField(product.id, 'quantity', $event.target.valueAsNumber)" /></td>
+                    <td v-if="columnVisibility.safety_quantity.visible"><input class="full-input" type="number" :value="product.safety_quantity" @change="updateField(product.id, 'safety_quantity', $event.target.valueAsNumber)" /></td>
+                    <td v-if="columnVisibility.supplier.visible"><input class="full-input" :value="product.supplier" @change="updateField(product.id, 'supplier', $event.target.value)" /></td>
+                    <td v-if="columnVisibility.purchase_price.visible"><input class="full-input" type="number" :value="product.purchase_price" @change="updateField(product.id, 'purchase_price', $event.target.valueAsNumber)" /></td>
+                    <td v-if="columnVisibility.consumer_price.visible"><input class="full-input" type="number" :value="product.consumer_price" @change="updateField(product.id, 'consumer_price', $event.target.valueAsNumber)" /></td>
+                    <td v-if="columnVisibility.location.visible"><input class="full-input" :value="product.location" @change="updateField(product.id, 'location', $event.target.value)" /></td>
+                    <td v-if="columnVisibility.barcode.visible"><input class="full-input" :value="product.barcode" @change="updateField(product.id, 'barcode', $event.target.value)" /></td>
+                    <td v-if="columnVisibility.barcode_format.visible"><input class="full-input" :value="product.barcode_format" @change="updateField(product.id, 'barcode_format', $event.target.value)" /></td>
+                    <td v-if="columnVisibility.weight.visible"><input class="full-input" :value="product.weight" @change="updateField(product.id, 'weight', $event.target.value)" /></td>
+                    <td v-if="columnVisibility.freight_amount.visible"><input class="full-input" :value="product.freight_amount" @change="updateField(product.id, 'freight_amount', $event.target.value)" /></td>
+                    <td v-if="columnVisibility.spec.visible"><input class="full-input" :value="product.spec" @change="updateField(product.id, 'spec', $event.target.value)" /></td>
+                    <td v-if="columnVisibility.serial_number.visible"><input class="full-input" type="number" :value="product.serial_number" @change="updateField(product.id, 'serial_number', $event.target.valueAsNumber)" /></td>
+                    <td v-if="columnVisibility.image_url.visible"><input class="full-input" :value="product.image_url" @change="updateField(product.id, 'image_url', $event.target.value)" /></td>
+                    <td v-if="columnVisibility.is_hidden.visible">
+                      <select class="full-input" :value="product.is_hidden ? 'true' : 'false'" @change="updateField(product.id, 'is_hidden', $event.target.value === 'true')">
                         <option value="false">노출</option>
                         <option value="true">숨김</option>
                       </select>
                     </td>
-                    <td style="font-size: 12px; color: #666;">{{ formatDate(product.updated_at) }}</td>
+                    <td v-if="columnVisibility.updated_at.visible"><span class="padding-cell text-muted">{{ formatDate(product.updated_at) }}</span></td>
                   </tr>
                 </template>
               </template>
@@ -118,30 +126,30 @@
                   <td style="text-align: center; color: #888; font-size: 11px; position: sticky; left: 0; background: #fff; z-index: 1; border-right: 1px solid #ddd;">
                     -
                   </td>
-                  <td><input class="short-input" :value="node.product.manage_code" @change="updateField(node.product.id, 'manage_code', $event.target.value)" /></td>
-                  <td><input class="long-input" :value="node.product.manage_name" @change="updateField(node.product.id, 'manage_name', $event.target.value)" /></td>
-                  <td><input class="long-input" :value="node.product.print_name" @change="updateField(node.product.id, 'print_name', $event.target.value)" /></td>
-                  <td><input class="long-input" :value="node.product.memo" @change="updateField(node.product.id, 'memo', $event.target.value)" /></td>
-                  <td><input class="short-input" type="number" :value="node.product.quantity" @change="updateField(node.product.id, 'quantity', $event.target.valueAsNumber)" /></td>
-                  <td><input class="short-input" type="number" :value="node.product.safety_quantity" @change="updateField(node.product.id, 'safety_quantity', $event.target.valueAsNumber)" /></td>
-                  <td><input class="short-input" :value="node.product.supplier" @change="updateField(node.product.id, 'supplier', $event.target.value)" /></td>
-                  <td><input class="short-input" type="number" :value="node.product.purchase_price" @change="updateField(node.product.id, 'purchase_price', $event.target.valueAsNumber)" /></td>
-                  <td><input class="short-input" type="number" :value="node.product.consumer_price" @change="updateField(node.product.id, 'consumer_price', $event.target.valueAsNumber)" /></td>
-                  <td><input class="short-input" :value="node.product.location" @change="updateField(node.product.id, 'location', $event.target.value)" /></td>
-                  <td><input class="short-input" :value="node.product.barcode" @change="updateField(node.product.id, 'barcode', $event.target.value)" /></td>
-                  <td><input class="short-input" :value="node.product.barcode_format" @change="updateField(node.product.id, 'barcode_format', $event.target.value)" /></td>
-                  <td><input class="short-input" :value="node.product.weight" @change="updateField(node.product.id, 'weight', $event.target.value)" /></td>
-                  <td><input class="short-input" :value="node.product.freight_amount" @change="updateField(node.product.id, 'freight_amount', $event.target.value)" /></td>
-                  <td><input class="short-input" :value="node.product.spec" @change="updateField(node.product.id, 'spec', $event.target.value)" /></td>
-                  <td><input class="short-input" type="number" :value="node.product.serial_number" @change="updateField(node.product.id, 'serial_number', $event.target.valueAsNumber)" /></td>
-                  <td><input class="short-input" :value="node.product.image_url" @change="updateField(node.product.id, 'image_url', $event.target.value)" /></td>
-                  <td>
-                    <select class="short-input" style="width:70px;" :value="node.product.is_hidden ? 'true' : 'false'" @change="updateField(node.product.id, 'is_hidden', $event.target.value === 'true')">
+                  <td v-if="columnVisibility.manage_code.visible"><input class="full-input" :value="node.product.manage_code" @change="updateField(node.product.id, 'manage_code', $event.target.value)" /></td>
+                  <td v-if="columnVisibility.manage_name.visible"><input class="full-input" :value="node.product.manage_name" @change="updateField(node.product.id, 'manage_name', $event.target.value)" /></td>
+                  <td v-if="columnVisibility.print_name.visible"><input class="full-input" :value="node.product.print_name" @change="updateField(node.product.id, 'print_name', $event.target.value)" /></td>
+                  <td v-if="columnVisibility.memo.visible"><input class="full-input" :value="node.product.memo" @change="updateField(node.product.id, 'memo', $event.target.value)" /></td>
+                  <td v-if="columnVisibility.quantity.visible"><input class="full-input" type="number" :value="node.product.quantity" @change="updateField(node.product.id, 'quantity', $event.target.valueAsNumber)" /></td>
+                  <td v-if="columnVisibility.safety_quantity.visible"><input class="full-input" type="number" :value="node.product.safety_quantity" @change="updateField(node.product.id, 'safety_quantity', $event.target.valueAsNumber)" /></td>
+                  <td v-if="columnVisibility.supplier.visible"><input class="full-input" :value="node.product.supplier" @change="updateField(node.product.id, 'supplier', $event.target.value)" /></td>
+                  <td v-if="columnVisibility.purchase_price.visible"><input class="full-input" type="number" :value="node.product.purchase_price" @change="updateField(node.product.id, 'purchase_price', $event.target.valueAsNumber)" /></td>
+                  <td v-if="columnVisibility.consumer_price.visible"><input class="full-input" type="number" :value="node.product.consumer_price" @change="updateField(node.product.id, 'consumer_price', $event.target.valueAsNumber)" /></td>
+                  <td v-if="columnVisibility.location.visible"><input class="full-input" :value="node.product.location" @change="updateField(node.product.id, 'location', $event.target.value)" /></td>
+                  <td v-if="columnVisibility.barcode.visible"><input class="full-input" :value="node.product.barcode" @change="updateField(node.product.id, 'barcode', $event.target.value)" /></td>
+                  <td v-if="columnVisibility.barcode_format.visible"><input class="full-input" :value="node.product.barcode_format" @change="updateField(node.product.id, 'barcode_format', $event.target.value)" /></td>
+                  <td v-if="columnVisibility.weight.visible"><input class="full-input" :value="node.product.weight" @change="updateField(node.product.id, 'weight', $event.target.value)" /></td>
+                  <td v-if="columnVisibility.freight_amount.visible"><input class="full-input" :value="node.product.freight_amount" @change="updateField(node.product.id, 'freight_amount', $event.target.value)" /></td>
+                  <td v-if="columnVisibility.spec.visible"><input class="full-input" :value="node.product.spec" @change="updateField(node.product.id, 'spec', $event.target.value)" /></td>
+                  <td v-if="columnVisibility.serial_number.visible"><input class="full-input" type="number" :value="node.product.serial_number" @change="updateField(node.product.id, 'serial_number', $event.target.valueAsNumber)" /></td>
+                  <td v-if="columnVisibility.image_url.visible"><input class="full-input" :value="node.product.image_url" @change="updateField(node.product.id, 'image_url', $event.target.value)" /></td>
+                  <td v-if="columnVisibility.is_hidden.visible">
+                    <select class="full-input" :value="node.product.is_hidden ? 'true' : 'false'" @change="updateField(node.product.id, 'is_hidden', $event.target.value === 'true')">
                       <option value="false">노출</option>
                       <option value="true">숨김</option>
                     </select>
                   </td>
-                  <td style="font-size: 12px; color: #666;">{{ formatDate(node.product.updated_at) }}</td>
+                  <td v-if="columnVisibility.updated_at.visible"><span class="padding-cell text-muted">{{ formatDate(node.product.updated_at) }}</span></td>
                 </tr>
               </template>
             </template>
@@ -158,7 +166,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { supabase } from "./supabaseClient";
 import ProductUpload from "./components/ProductUpload.vue";
 
@@ -175,6 +183,55 @@ const tabProducts = ref({}); // Tab caching
 const activeTab = ref(null);
 const loadingTabs = ref(new Set());
 
+// Columns Setup
+const defaultCols = {
+  manage_code: { label: '관리코드', visible: true },
+  manage_name: { label: '관리상품명', visible: true },
+  print_name: { label: '인쇄상품명', visible: true },
+  memo: { label: '메모', visible: true },
+  quantity: { label: '재고', visible: true },
+  safety_quantity: { label: '안전재고', visible: true },
+  supplier: { label: '사입처', visible: false },
+  purchase_price: { label: '사입단가', visible: true },
+  consumer_price: { label: '소비자가', visible: true },
+  location: { label: '위치', visible: true },
+  barcode: { label: '바코드', visible: false },
+  barcode_format: { label: '바코드포멧', visible: false },
+  weight: { label: '무게', visible: false },
+  freight_amount: { label: '운임금액', visible: false },
+  spec: { label: '규격', visible: false },
+  serial_number: { label: '일련번호', visible: false },
+  image_url: { label: '이미지URL', visible: false },
+  is_hidden: { label: '숨김여부', visible: false },
+  updated_at: { label: '수정일시', visible: false }
+};
+
+const columnVisibility = ref(defaultCols);
+
+onMounted(() => {
+  const saved = localStorage.getItem('columnVisibility');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      for (const key in columnVisibility.value) {
+        if (parsed[key] !== undefined && parsed[key].visible !== undefined) {
+          columnVisibility.value[key].visible = parsed[key].visible;
+        }
+      }
+    } catch {
+      // suppress warning
+    }
+  }
+});
+
+watch(columnVisibility, (newVal) => {
+  localStorage.setItem('columnVisibility', JSON.stringify(newVal));
+}, { deep: true });
+
+const visibleColCount = computed(() => {
+  return Object.values(columnVisibility.value).filter(c => c.visible).length;
+});
+
 // Tab keys: A-Z plus # for others
 function allTabs() {
   const tabs = [];
@@ -190,12 +247,19 @@ async function loadTab(tab) {
   if (tabProducts.value[tab] || loadingTabs.value.has(tab)) return;
   loadingTabs.value.add(tab);
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("products")
       .select("*")
-      .ilike('manage_code', `${tab}%`)
       .eq('is_deleted', false)
       .order('manage_code', { ascending: true }); // Ascending order
+      
+    if (tab === '#') {
+       query = query.or('manage_code.is.null,manage_code.eq.,manage_code.like.0%,manage_code.like.1%,manage_code.like.2%,manage_code.like.3%,manage_code.like.4%,manage_code.like.5%,manage_code.like.6%,manage_code.like.7%,manage_code.like.8%,manage_code.like.9%,manage_code.like.[%,manage_code.like.(%,manage_code.like.-%');
+    } else {
+       query = query.ilike('manage_code', `${tab}%`);
+    }
+    
+    const { data, error } = await query;
     if (error) throw error;
     tabProducts.value[tab] = data;
   } finally {
@@ -364,6 +428,25 @@ nav button { padding: 10px 20px; background: #1976d2; color: white; border: none
   cursor: pointer;
 }
 
+.column-visibility-container {
+  background: #fdfdfd;
+  border: 1px solid #ddd;
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.vis-label {
+  display:flex; 
+  align-items:center; 
+  gap:4px; 
+  font-size:13px; 
+  cursor:pointer;
+}
+
 .add-product { margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 8px; }
 .add-product input { margin-right: 10px; padding: 8px; }
 .add-product h2 { margin-top: 0; }
@@ -424,35 +507,52 @@ nav button { padding: 10px 20px; background: #1976d2; color: white; border: none
 }
 .product-table th, .product-table td { 
   border: 1px solid #ddd; 
-  padding: 8px; 
   text-align: left; 
+  padding: 0; /* Remove default padding for full width inputs */
 }
 .product-table th { 
   background: #f5f5f5; 
   font-weight: bold; 
+  padding: 8px; /* Header gets padding */
+}
+
+/* Base class for cells that just show text */
+.padding-cell {
+  display: block;
+  padding: 8px;
+}
+.text-muted {
+  color: #666;
 }
 
 .group-row { cursor: pointer; background: #eaeff5; }
-.group-row td { border-top: 2px solid #ccc; border-bottom: 2px solid #ccc; }
+.group-row td { border-top: 2px solid #ccc; border-bottom: 2px solid #ccc; padding: 8px; } /* Override padding removal for group */
 .group-row:hover { background: #dce4f0; }
 
 .item-row { background: #ffffff; }
-.item-row:hover { background: #f9f9f9; }
-.item-row td { color: #555; }
+.item-row:focus-within { background: #fdfcee; }
 
-.short-input {
-  width: 100px;
-  padding: 4px 6px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+/* The new full-width input style */
+.full-input {
+  width: 100%;
+  height: 100%;
+  min-height: 34px;
   box-sizing: border-box;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: inherit;
 }
-.long-input {
-  width: 200px;
-  padding: 4px 6px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  box-sizing: border-box;
+
+.full-input:hover {
+  background: #f9f9f9;
+}
+
+.full-input:focus {
+  background: #fff;
+  box-shadow: inset 0 0 0 2px #1976d2;
 }
 
 .expand-icon { font-size: 12px; color: #666; }
