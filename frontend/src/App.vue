@@ -58,6 +58,13 @@
             </div>
           </div>
 
+          <div class="modal-section" v-if="modifiedIds.size > 0">
+            <label class="modal-label">수정 기록 관리</label>
+            <button class="btn-clear-modified" @click="confirmClearModified">
+              🗑️ 수정 내역 초기화 ({{ modifiedIds.size }}개)
+            </button>
+          </div>
+
           <div class="modal-actions">
             <button class="btn-cancel" @click="showDownloadModal = false">취소</button>
             <button class="btn-download" @click="doDownloadExcel">다운로드</button>
@@ -398,6 +405,30 @@ function openDownloadModal() {
   if (modifiedIds.value.size === 0) downloadMode.value = 'all';
 }
 
+function confirmClearModified() {
+  if (confirm(`수정 내역 ${modifiedIds.value.size}개를 초기화하시겠습니까?`)) {
+    clearModified();
+    addToast('수정 내역이 초기화되었습니다.');
+    downloadMode.value = 'all';
+  }
+}
+
+// Supabase 1000건 제한 우회를 위한 페이지네이션 헬퍼
+async function fetchAllProducts(queryBuilder) {
+  const PAGE_SIZE = 1000;
+  let allData = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await queryBuilder(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allData = allData.concat(data);
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return allData;
+}
+
 async function doDownloadExcel() {
   showDownloadModal.value = false;
 
@@ -408,25 +439,31 @@ async function doDownloadExcel() {
   addToast('데이터 조회 중...');
 
   let products = [];
-  if (downloadMode.value === 'modified' && modifiedIds.value.size > 0) {
-    const ids = [...modifiedIds.value];
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .in('id', ids)
-      .eq('is_deleted', false)
-      .order('manage_code', { ascending: true });
-    if (error) { addToast('조회 실패: ' + error.message); return; }
-    products = data;
-  } else {
-    // Download all from ALL tabs (full DB)
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('is_deleted', false)
-      .order('manage_code', { ascending: true });
-    if (error) { addToast('조회 실패: ' + error.message); return; }
-    products = data;
+  try {
+    if (downloadMode.value === 'modified' && modifiedIds.value.size > 0) {
+      const ids = [...modifiedIds.value];
+      products = await fetchAllProducts((from, to) =>
+        supabase
+          .from('products')
+          .select('*')
+          .in('id', ids)
+          .eq('is_deleted', false)
+          .order('manage_code', { ascending: true })
+          .range(from, to)
+      );
+    } else {
+      products = await fetchAllProducts((from, to) =>
+        supabase
+          .from('products')
+          .select('*')
+          .eq('is_deleted', false)
+          .order('manage_code', { ascending: true })
+          .range(from, to)
+      );
+    }
+  } catch (err) {
+    addToast('조회 실패: ' + err.message);
+    return;
   }
 
   if (products.length === 0) { addToast('다운로드할 데이터가 없습니다.'); return; }
@@ -1031,6 +1068,22 @@ nav button { padding: 10px 20px; background: #1976d2; color: white; border: none
 .btn-cancel:hover { background: #f5f5f5; }
 .btn-download { padding: 9px 24px; border: none; border-radius: 6px; background: linear-gradient(135deg, #217346, #2e9e5c); color: #fff; cursor: pointer; font-size: 14px; font-weight: 600; }
 .btn-download:hover { filter: brightness(1.1); }
+.btn-clear-modified {
+  width: 100%;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #ff5252;
+  color: #ff5252;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.btn-clear-modified:hover {
+  background: #fff5f5;
+  box-shadow: 0 2px 4px rgba(255, 82, 82, 0.1);
+}
 
 .column-visibility-container { background: #fdfdfd; border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .vis-label { display:flex; align-items:center; gap:4px; font-size:13px; cursor:pointer; padding: 4px 8px; background: #eee; border-radius: 4px; }
