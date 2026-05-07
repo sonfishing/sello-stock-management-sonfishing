@@ -19,6 +19,7 @@
             </button>
           </div>
         </div>
+      </div>
 
       <div class="menu-section columns-section" v-if="currentView === 'list'">
         <h3>📊 컬럼 표시 및 순서 (드래그)</h3>
