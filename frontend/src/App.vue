@@ -1,15 +1,22 @@
 <template>
-  <!-- Top Off-canvas Menu -->
+  <!-- Top Off-canvas Menu (Settings/Columns) -->
   <div class="off-canvas-menu" :class="{ 'active': showOffCanvas }">
     <div class="menu-inner">
       <div class="menu-grid">
-        <div class="menu-section">
-          <h3>🚀 보기 전환</h3>
-          <nav class="view-nav">
-            <button :class="{ 'active': currentView === 'list' }" @click="currentView = 'list'; showOffCanvas = false">📦 상품 목록</button>
-            <button :class="{ 'active': currentView === 'upload' }" @click="currentView = 'upload'; showOffCanvas = false">📤 엑셀 업로드</button>
-          </nav>
+        <div class="menu-section" v-if="currentView === 'list'">
+          <h3>🛠️ 데이터 관리</h3>
+          <div class="menu-actions">
+            <button class="excel-download-btn" @click="openDownloadModal">
+              📥 엑셀 다운로드 설정
+              <span v-if="modifiedIds.size > 0" class="modified-badge">{{ modifiedIds.size }}</span>
+            </button>
+            <label class="group-toggle">
+              <input type="checkbox" v-model="isGroupView" />
+              <span>그룹으로 묶어보기</span>
+            </label>
+          </div>
         </div>
+      </div>
 
         <div class="menu-section" v-if="currentView === 'list'">
           <h3>🛠️ 데이터 관리</h3>
@@ -94,29 +101,77 @@
     </div>
   </div>
 
-  <div class="main-layout" :class="{ 'dimmed': showOffCanvas || showAddCanvas }">
+  <!-- Add Product Off-canvas Menu (Batch Sheet) -->
+  <div class="off-canvas-menu add-canvas" :class="{ 'active': showAddCanvas }">
+    <div class="menu-inner" style="max-width: 1400px;">
+      <div class="menu-header">
+        <h3>✨ 새 상품 일괄 등록</h3>
+        <p class="subtitle">시트 형식으로 한 번에 여러 상품을 입력할 수 있습니다 (최대 10개)</p>
+      </div>
+      
+      <div class="add-table-wrapper">
+        <table class="add-entry-table">
+          <thead>
+            <tr>
+              <th style="width: 40px;">No</th>
+              <th style="width: 150px;">관리코드</th>
+              <th style="width: 300px;">상품명 (필수)</th>
+              <th style="width: 100px;">재고</th>
+              <th style="width: 100px;">안전재고</th>
+              <th style="width: 120px;">사입단가</th>
+              <th style="width: 120px;">소비자가</th>
+              <th style="width: 150px;">위치</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(p, idx) in newProducts" :key="idx">
+              <td style="text-align: center; color: #999;">{{ idx + 1 }}</td>
+              <td><input v-model="p.manage_code" placeholder="A-001" /></td>
+              <td><input v-model="p.manage_name" placeholder="상품명을 입력하세요" /></td>
+              <td><input v-model.number="p.quantity" type="number" /></td>
+              <td><input v-model.number="p.safety_quantity" type="number" /></td>
+              <td><input v-model.number="p.purchase_price" type="number" /></td>
+              <td><input v-model.number="p.consumer_price" type="number" /></td>
+              <td><input v-model="p.location" placeholder="창고 위치" /></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="menu-footer add-footer">
+        <span class="add-info">💡 상품명이 입력된 행만 등록됩니다.</span>
+        <div class="btns">
+          <button class="cancel-btn" @click="showAddCanvas = false">취소</button>
+          <button class="submit-btn" @click="doBatchAdd">🚀 상품 등록하기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-layout" :class="{ 'dimmed': showOffCanvas || showAddCanvas || showUploadModal || showDownloadModal }">
     <!-- Top Bar -->
     <header class="top-bar">
       <div class="left-actions">
         <button class="menu-btn" @click="showOffCanvas = !showOffCanvas">
-          <span class="icon">☰</span> 설정/관리
+          <span class="icon">⚙️</span> 설정
         </button>
         <button class="add-btn-top" @click="showAddCanvas = true">
           <span class="icon">➕</span> 상품 등록
         </button>
+        <button class="upload-btn-top" @click="showUploadModal = true">
+          <span class="icon">📤</span> 엑셀 업로드
+        </button>
       </div>
       <h1 class="title">STOCK MASTER</h1>
       <div class="status-indicators">
-        <span v-if="modifiedIds.size > 0" class="status-badge modified">수정 중: {{ modifiedIds.size }}</span>
+        <span v-if="modifiedIds.size > 0" class="status-badge modified">수정된 항목: {{ modifiedIds.size }}</span>
       </div>
     </header>
 
     <div class="workspace">
       <!-- Main Content Area -->
       <div class="content-area">
-        <ProductUpload v-if="currentView === 'upload'" />
-        
-        <div v-else-if="currentView === 'list'" class="list-view">
+        <div class="list-view">
           <!-- Search Input Overlay -->
           <Transition name="slide-fade">
             <div v-if="activeTab === '🔍 검색'" class="floating-search">
@@ -249,10 +304,21 @@
     </div>
   </div>
 
+  <!-- Excel Upload Modal -->
+  <div v-if="showUploadModal" class="modal-overlay" @click.self="showUploadModal = false">
+    <div class="modal-box" style="max-width: 1000px; max-height: 90vh; overflow: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 class="modal-title">📤 엑셀 파일 업로드</h2>
+        <button @click="showUploadModal = false" style="background:none; border:none; font-size: 24px; cursor:pointer;">&times;</button>
+      </div>
+      <ProductUpload @onUploadSuccess="showUploadModal = false" />
+    </div>
+  </div>
+
   <!-- Excel Download Modal -->
   <div v-if="showDownloadModal" class="modal-overlay" @click.self="showDownloadModal = false">
     <div class="modal-box">
-      <h2 class="modal-title">📥 엑셀 다운로드</h2>
+      <h2 class="modal-title">📥 엑셀 다운로드 설정</h2>
 
       <div class="modal-section">
         <label class="modal-label">다운로드 범위</label>
@@ -298,18 +364,25 @@
 import { ref, computed, watch, onMounted, nextTick } from "vue";
 import { supabase } from "./supabaseClient";
 import ProductUpload from "./components/ProductUpload.vue";
+import "./App.css";
 
-const newProduct = ref({
+const newProducts = ref(Array.from({ length: 10 }, () => ({
   manage_code: "",
   manage_name: "",
   quantity: 0,
+  safety_quantity: 0,
   purchase_price: 0,
-});
+  consumer_price: 0,
+  location: "" 
+})));
+
 const currentView = ref("list");
 const isGroupView = ref(true);
 const toastMessages = ref([]);
 const showOffCanvas = ref(false);
 const showAddCanvas = ref(false);
+const showUploadModal = ref(false);
+const showDownloadModal = ref(false);
 
 function addToast(message) {
   const id = Date.now() + Math.random();
@@ -1047,56 +1120,54 @@ function formatDate(dateStr) {
   }
 }
 
-async function doAddProduct() {
-  if (!newProduct.value.manage_name) {
-    alert("상품명은 필수입니다.");
+async function doBatchAdd() {
+  const productsToAdd = newProducts.value.filter(p => p.manage_name.trim() !== "");
+  if (productsToAdd.length === 0) {
+    alert("등록할 상품명을 입력해주세요.");
     return;
   }
-  await addProduct();
-  showAddCanvas.value = false;
-}
+  
+  let successCount = 0;
+  for (const p of productsToAdd) {
+    const now = new Date().toISOString();
+    const { data: insertedData, error } = await supabase.from("products").insert([{
+      manage_code: p.manage_code || "",
+      manage_name: p.manage_name,
+      quantity: p.quantity || 0,
+      safety_quantity: p.safety_quantity || 0,
+      purchase_price: p.purchase_price || 0,
+      consumer_price: p.consumer_price || 0,
+      location: p.location || "",
+      registered_at: now,
+      updated_at: now
+    }]).select();
 
-async function addProduct() {
-  const now = new Date().toISOString();
-  // Ensure we include all fields from the new table UI
-  const { data: insertedData, error } = await supabase.from("products").insert([{
-    manage_code: newProduct.value.manage_code || "",
-    manage_name: newProduct.value.manage_name,
-    quantity: newProduct.value.quantity || 0,
-    safety_quantity: newProduct.value.safety_quantity || 0,
-    purchase_price: newProduct.value.purchase_price || 0,
-    consumer_price: newProduct.value.consumer_price || 0,
-    location: newProduct.value.location || "",
-    registered_at: now,
-    updated_at: now
-  }]).select(); // Use .select() to get the inserted row back
-  
-  if (error) {
-    console.error("Error adding product:", error);
-    alert("추가 실패: " + error.message);
-    return;
-  }
-  
-  const insertedProduct = insertedData[0];
-  const code = insertedProduct.manage_code;
-  if (code) {
-    const firstChar = code[0].toUpperCase();
-    const tab = /[A-Z]/.test(firstChar) ? firstChar : '#';
-    if (tabProducts.value[tab]) {
-      tabProducts.value[tab].push(insertedProduct);
-      tabProducts.value[tab].sort((a, b) => (a.manage_code > b.manage_code ? 1 : -1));
+    if (!error) {
+      successCount++;
+      const insertedProduct = insertedData[0];
+      const code = insertedProduct.manage_code;
+      if (code) {
+        const firstChar = code[0].toUpperCase();
+        const tab = /[A-Z]/.test(firstChar) ? firstChar : '#';
+        if (tabProducts.value[tab]) {
+          tabProducts.value[tab].push(insertedProduct);
+          tabProducts.value[tab].sort((a, b) => (a.manage_code > b.manage_code ? 1 : -1));
+        }
+      }
+    } else {
+      console.error("Add error:", error);
     }
   }
-  
-  // Reset fields
-  newProduct.value = { 
-    manage_code: "", manage_name: "", quantity: 0, safety_quantity: 0, 
-    purchase_price: 0, consumer_price: 0, location: "" 
-  };
-  addToast("새 상품이 등록되었습니다.");
-  
-  if (activeTab.value) {
-    await loadTab(activeTab.value, true); // Refresh current tab
+
+  if (successCount > 0) {
+    addToast(`${successCount}개의 상품이 등록되었습니다.`);
+    // Reset sheet
+    newProducts.value = Array.from({ length: 10 }, () => ({
+      manage_code: "", manage_name: "", quantity: 0, safety_quantity: 0, 
+      purchase_price: 0, consumer_price: 0, location: "" 
+    }));
+    showAddCanvas.value = false;
+    if (activeTab.value) await loadTab(activeTab.value, true);
   }
 }
 
@@ -1105,318 +1176,5 @@ function selectTab(tab) {
   loadTab(tab);
 }
 </script>
-
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700&display=swap');
-
-:root {
-  --primary: #1976d2;
-  --accent: #2196f3;
-  --bg-main: #f0f2f5;
-  --glass: rgba(255, 255, 255, 0.85);
-  --glass-dark: rgba(255, 255, 255, 0.95);
-  --shadow: 0 8px 32px rgba(0,0,0,0.1);
-  --radius: 12px;
-}
-
-body {
-  margin: 0;
-  font-family: 'Inter', sans-serif;
-  background-color: var(--bg-main);
-  color: #333;
-  overflow: hidden; /* App takes full height */
-}
-
-#app {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Off-canvas Menu */
-.off-canvas-menu {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  max-height: 80vh;
-  background: var(--glass-dark);
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-  z-index: 2000;
-  transform: translateY(-100%);
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 10px 40px rgba(0,0,0,0.15);
-  border-bottom-left-radius: 20px;
-  border-bottom-right-radius: 20px;
-  overflow-y: auto;
-}
-.off-canvas-menu.active {
-  transform: translateY(0);
-}
-
-.menu-inner {
-  padding: 40px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.menu-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 30px;
-  margin-bottom: 30px;
-}
-
-.menu-section h3 {
-  font-family: 'Outfit', sans-serif;
-  font-size: 16px;
-  color: #666;
-  margin-bottom: 15px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.view-nav { display: flex; gap: 10px; }
-.view-nav button {
-  flex: 1;
-  padding: 15px;
-  border: 1px solid #ddd;
-  border-radius: var(--radius);
-  background: #fff;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-weight: 600;
-}
-.view-nav button.active {
-  background: var(--primary);
-  color: #fff;
-  border-color: var(--primary);
-  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
-}
-
-.menu-actions { display: flex; flex-direction: column; gap: 15px; }
-
-.add-product-compact { display: flex; flex-direction: column; gap: 8px; }
-.add-product-compact input {
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  outline: none;
-}
-.add-product-compact button {
-  padding: 10px;
-  background: var(--primary);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.columns-section { border-top: 1px solid #eee; padding-top: 20px; }
-.column-visibility-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
-}
-
-.menu-footer {
-  text-align: center;
-  margin-top: 20px;
-}
-.close-menu-btn {
-  padding: 10px 40px;
-  background: #333;
-  color: #fff;
-  border: none;
-  border-radius: 20px;
-  cursor: pointer;
-  font-weight: bold;
-}
-
-/* Main Layout */
-.main-layout {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  transition: filter 0.4s;
-}
-.main-layout.dimmed {
-  filter: blur(4px) brightness(0.9);
-  pointer-events: none;
-}
-
-.top-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  height: 60px;
-  background: #fff;
-  border-bottom: 1px solid #e0e0e0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-}
-
-.menu-btn {
-  background: #f5f5f7;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 18px;
-  cursor: pointer;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: background 0.2s;
-}
-.menu-btn:hover { background: #eaeaec; }
-
-.title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 20px;
-  font-weight: 700;
-  color: #1a1a1a;
-  letter-spacing: -0.5px;
-}
-
-.status-badge {
-  padding: 4px 12px;
-  border-radius: 15px;
-  font-size: 12px;
-  font-weight: 700;
-}
-.status-badge.modified { background: #fff1f1; color: #ff5252; border: 1px solid #ff5252; }
-
-.workspace {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-
-/* Content Area & Scrolling */
-.content-area {
-  flex: 1;
-  overflow: hidden;
-  padding: 15px;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  height: 100%; /* Ensure it takes parent height */
-}
-
-.list-view {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  height: 100%;
-}
-
-.table-container {
-  flex: 1;
-  overflow: hidden;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-  border: 1px solid #eee;
-  display: flex;
-  flex-direction: column;
-}
-
-.table-wrapper {
-  flex: 1;
-  overflow: auto;
-  position: relative;
-}
-
-.product-table {
-  width: max-content; /* Ensure table can be wider than container for horizontal scroll */
-  min-width: 100%;
-  border-collapse: collapse;
-  user-select: none;
-  table-layout: fixed;
-}
-
-/* Sidebar Scrolling */
-.sidebar-right {
-  width: 70px;
-  background: #fff;
-  border-left: 1px solid #e0e0e0;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.sidebar-scroll {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  padding: 10px 0;
-  scrollbar-width: none; /* Hide scrollbar for cleaner look */
-}
-.sidebar-scroll::-webkit-scrollbar { display: none; }
-
-/* Add Product Table Style */
-.add-canvas { background: rgba(255, 255, 255, 0.98); }
-.add-table-wrapper { margin: 25px 0; overflow-x: auto; }
-.add-entry-table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #ddd; }
-.add-entry-table th { background: #f5f5f7; padding: 12px; font-size: 13px; text-align: left; border: 1px solid #ddd; }
-.add-entry-table td { padding: 8px; border: 1px solid #ddd; }
-.add-entry-table input { width: 100%; padding: 10px; border: 1px solid #eee; border-radius: 4px; box-sizing: border-box; }
-.add-entry-table input:focus { border-color: var(--primary); outline: none; }
-
-.add-footer { display: flex; justify-content: flex-end; gap: 12px; }
-.submit-btn { padding: 12px 30px; background: var(--primary); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
-.cancel-btn { padding: 12px 30px; background: #eee; color: #333; border: none; border-radius: 8px; cursor: pointer; }
-
-/* Top Bar Polishing */
-.left-actions { display: flex; gap: 10px; }
-.add-btn-top {
-  background: var(--primary);
-  color: #fff;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 18px;
-  cursor: pointer;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Resize Handle Visibility */
-.col-resize-handle {
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 8px;
-  height: 100%;
-  cursor: col-resize;
-  z-index: 10;
-  background: transparent;
-}
-.col-resize-handle:hover {
-  background: rgba(25, 118, 210, 0.4);
-}
-.resizable-th:hover .col-resize-handle {
-  background: rgba(0, 0, 0, 0.05);
-}
-
-.floating-search {
-  position: absolute;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 100;
-  background: #fff;
-  padding: 12px 20px;
-  border-radius: 30px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-  display: flex;
-  gap: 10px;
-  width: 400px;
-  border: 1px solid #eee;
-}
 
 </style>
