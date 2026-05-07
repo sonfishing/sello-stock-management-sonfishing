@@ -496,7 +496,6 @@ function unmarkModified(id) {
 }
 
 // ─── Excel Download Modal ─────────────────────────────────────────────────────
-const showDownloadModal = ref(false);
 const downloadMode = ref('all'); // 'all' | 'modified'
 const downloadCols = ref(
   Object.fromEntries(Object.keys(defaultCols).map(k => [
