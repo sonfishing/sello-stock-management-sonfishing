@@ -8,7 +8,7 @@
   --glass-dark: rgba(255, 255, 255, 0.95);
   --shadow: 0 8px 32px rgba(0,0,0,0.1);
   --radius: 12px;
-  --border-color: #d1d9e0; /* More visible border */
+  --border-color: #a0aab5; /* Darker, more visible border */
 }
 
 body {
@@ -154,6 +154,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
 }
 
 .table-container {
@@ -165,6 +166,7 @@ body {
   border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .table-wrapper { flex: 1; overflow: auto; position: relative; }
@@ -181,6 +183,8 @@ body {
   background: #f8f9fa;
   border-bottom: 2px solid var(--border-color);
   border-right: 1px solid var(--border-color);
+  border-left: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-color);
   padding: 0;
   position: sticky;
   top: 0;
@@ -197,17 +201,15 @@ body {
 .excel-cell {
   position: relative;
   cursor: cell;
-  transition: background 0.1s, border-color 0.1s;
+  transition: background 0.1s, box-shadow 0.1s;
 }
 .excel-cell:hover {
-  border: 1px solid var(--primary) !important;
+  box-shadow: inset 0 0 0 1px var(--primary) !important;
   z-index: 5;
 }
 .cell-selected {
-  outline: 2px solid var(--primary);
-  outline-offset: -1px;
   background-color: rgba(25, 118, 210, 0.08);
-  box-shadow: 0 0 8px rgba(25, 118, 210, 0.3);
+  box-shadow: inset 0 0 0 2px var(--primary), 0 0 8px rgba(25, 118, 210, 0.3) !important;
   z-index: 6;
 }
 
@@ -217,7 +219,7 @@ body {
 .resizable-th { position: relative; }
 .col-resize-handle {
   position: absolute;
-  right: 0;
+  right: -3px;
   top: 0;
   width: 6px;
   height: 100%;
@@ -230,40 +232,52 @@ body {
   background: var(--primary);
 }
 
-/* Sidebar Right */
+/* Sidebar (Now Horizontal Top Bar) */
 .sidebar-right {
-  width: 75px;
+  width: 100%;
+  height: 55px;
   background: #fff;
-  border-left: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-shrink: 0;
 }
 .sidebar-scroll {
   flex: 1;
-  overflow-y: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   display: flex;
-  flex-direction: column;
-  padding: 10px 0;
+  flex-direction: row;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
 }
 .sidebar-scroll button {
-  width: 100%;
-  height: 55px;
+  width: 55px;
+  height: 100%;
+  flex-shrink: 0;
   border: none;
   background: transparent;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
   color: #666;
   font-weight: 700;
-  font-size: 12px;
+  font-size: 13px;
 }
 .sidebar-scroll button.active {
   color: var(--primary);
   background: #f0f7ff;
-  border-right: 4px solid var(--primary);
+  border-bottom: 4px solid var(--primary);
 }
 
 /* Add Product Table (Batch Entry) */
@@ -329,18 +343,23 @@ body {
 }
 
 .excel-download-btn {
-  background: linear-gradient(135deg, #217346, #2e9e5c);
+  background: linear-gradient(135deg, #107c41, #185c37);
   color: #fff;
   border: none;
-  padding: 12px 20px;
-  border-radius: 10px;
-  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  box-shadow: 0 4px 12px rgba(33, 115, 70, 0.25);
+  box-shadow: 0 4px 10px rgba(16, 124, 65, 0.3);
+  transition: all 0.2s;
+}
+.excel-download-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(16, 124, 65, 0.4);
 }
 
 /* Animations */

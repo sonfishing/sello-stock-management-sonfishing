@@ -7,21 +7,6 @@
           <h3>🛠️ 데이터 관리</h3>
           <div class="menu-actions">
             <button class="excel-download-btn" @click="openDownloadModal">
-              📥 엑셀 다운로드 설정
-              <span v-if="modifiedIds.size > 0" class="modified-badge">{{ modifiedIds.size }}</span>
-            </button>
-            <label class="group-toggle">
-              <input type="checkbox" v-model="isGroupView" />
-              <span>그룹으로 묶어보기</span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-        <div class="menu-section" v-if="currentView === 'list'">
-          <h3>🛠️ 데이터 관리</h3>
-          <div class="menu-actions">
-            <button class="excel-download-btn" @click="openDownloadModal">
               📥 엑셀 다운로드
               <span v-if="modifiedIds.size > 0" class="modified-badge">{{ modifiedIds.size }}</span>
             </button>
@@ -34,7 +19,6 @@
             </button>
           </div>
         </div>
-      </div>
 
       <div class="menu-section columns-section" v-if="currentView === 'list'">
         <h3>📊 컬럼 표시 및 순서 (드래그)</h3>
@@ -55,48 +39,6 @@
       
       <div class="menu-footer">
         <button class="close-menu-btn" @click="showOffCanvas = false">닫기</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Add Product Off-canvas Menu -->
-  <div class="off-canvas-menu add-canvas" :class="{ 'active': showAddCanvas }">
-    <div class="menu-inner">
-      <div class="menu-header">
-        <h3>✨ 새 상품 등록</h3>
-        <p class="subtitle">테이블 형식으로 빠르게 상품 정보를 입력하세요</p>
-      </div>
-      
-      <div class="add-table-wrapper">
-        <table class="add-entry-table">
-          <thead>
-            <tr>
-              <th>관리코드</th>
-              <th>상품명 (필수)</th>
-              <th>재고</th>
-              <th>안전재고</th>
-              <th>사입단가</th>
-              <th>소비자가</th>
-              <th>위치</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><input v-model="newProduct.manage_code" placeholder="예: A-001" /></td>
-              <td><input v-model="newProduct.manage_name" placeholder="상품명을 입력하세요" /></td>
-              <td><input v-model.number="newProduct.quantity" type="number" /></td>
-              <td><input v-model.number="newProduct.safety_quantity" type="number" /></td>
-              <td><input v-model.number="newProduct.purchase_price" type="number" /></td>
-              <td><input v-model.number="newProduct.consumer_price" type="number" /></td>
-              <td><input v-model="newProduct.location" placeholder="창고 위치" /></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="menu-footer add-footer">
-        <button class="cancel-btn" @click="showAddCanvas = false">취소</button>
-        <button class="submit-btn" @click="doAddProduct">🚀 상품 등록하기</button>
       </div>
     </div>
   </div>
@@ -169,6 +111,22 @@
     </header>
 
     <div class="workspace">
+      <!-- Top Sidebar Tabs (Alphabet) -->
+      <aside class="sidebar-right">
+        <div class="sidebar-scroll">
+          <button 
+            v-for="tab in allTabs()" 
+            :key="tab"
+            :class="{ 'active': activeTab === tab, 'loading': loadingTabs.has(tab) }"
+            @click="selectTab(tab)"
+            :disabled="loadingTabs.has(tab)"
+          >
+            <span class="tab-text">{{ tab }}</span>
+            <span v-if="loadingTabs.has(tab)" class="loading-dot">●</span>
+          </button>
+        </div>
+      </aside>
+
       <!-- Main Content Area -->
       <div class="content-area">
         <div class="list-view">
@@ -286,21 +244,6 @@
         </div>
       </div>
 
-      <!-- Right Sidebar Tabs -->
-      <aside class="sidebar-right">
-        <div class="sidebar-scroll">
-          <button 
-            v-for="tab in allTabs()" 
-            :key="tab"
-            :class="{ 'active': activeTab === tab, 'loading': loadingTabs.has(tab) }"
-            @click="selectTab(tab)"
-            :disabled="loadingTabs.has(tab)"
-          >
-            <span class="tab-text">{{ tab }}</span>
-            <span v-if="loadingTabs.has(tab)" class="loading-dot">●</span>
-          </button>
-        </div>
-      </aside>
     </div>
   </div>
 
