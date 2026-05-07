@@ -155,7 +155,10 @@
                         <template v-if="cIdx === 0">
                           <span class="expand-icon">{{ expandedGroups.has(row.node.prefix) ? '▼' : '▶' }}</span>
                         </template>
-                        <template v-if="key === 'manage_name'">
+                        <template v-if="key === 'manage_code'">
+                          <strong>{{ row.node.prefix }}</strong>
+                        </template>
+                        <template v-else-if="key === 'manage_name'">
                           <strong>{{ row.node.name }}</strong>
                         </template>
                       </td>
