@@ -289,6 +289,15 @@ const undoLastAction = async () => {
     });
   }
   addToast('복구 완료');
+
+  // 수정 항목 기록 해제 로직: 복구된 상품 중 더 이상 undo 스택에 남은 수정 사항이 없는 경우 mark 해제
+  const affectedIds = [...new Set(lastChanges.map(c => c.id))];
+  for (const id of affectedIds) {
+    const isStillModified = undoStack.value.some(batch => batch.some(c => c.id === id));
+    if (!isStillModified) {
+      unmarkModified(id);
+    }
+  }
 };
 
 const defaultCols = {
@@ -389,6 +398,11 @@ function markModified(id) {
 function clearModified() {
   modifiedIds.value.clear();
   localStorage.removeItem(MODIFIED_KEY);
+}
+
+function unmarkModified(id) {
+  modifiedIds.value.delete(id);
+  localStorage.setItem(MODIFIED_KEY, JSON.stringify([...modifiedIds.value]));
 }
 
 // ─── Excel Download Modal ─────────────────────────────────────────────────────
@@ -784,6 +798,7 @@ function handleGlobalKeydown(e) {
             updates.updated_at = new Date().toISOString();
             promises.push(supabase.from('products').update(updates).eq('id', product.id));
             updateCount++;
+            markModified(product.id);
          }
       }
       
@@ -876,6 +891,7 @@ async function handleGlobalPaste(e) {
         updates.updated_at = new Date().toISOString();
         promises.push(supabase.from('products').update(updates).eq('id', product.id));
         updateCount++;
+        markModified(product.id);
       }
    }
    
