@@ -132,10 +132,6 @@
               <table class="product-table" @dragstart.prevent>
                 <thead>
                   <tr>
-                    <th class="th-no resizable-th" style="position: sticky; left: 0; z-index: 2; background: var(--bg-main);" :style="{ width: colWidths['No'] + 'px', minWidth: '40px' }">
-                      <span class="th-label">No</span>
-                      <span class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, 'No')" @touchstart.stop.prevent="startColResize($event, 'No')"></span>
-                    </th>
                     <th
                       v-for="key in visibleColsKeys"
                       :key="key"
@@ -155,18 +151,12 @@
                   <template v-for="row in renderRows" :key="row.isGroupRow ? row.node.id : row.product.id">
                     <!-- Group Row -->
                     <tr v-if="row.isGroupRow" class="group-row" @click="toggleGroup(row.node.prefix)" :style="{ backgroundColor: row.node.color }">
-                      <td :style="{ backgroundColor: row.node.color, textAlign: 'center', position: 'sticky', left: 0, zIndex: 1, borderRight: '1px solid #ddd' }">
-                        <span class="expand-icon">{{ expandedGroups.has(row.node.prefix) ? '▼' : '▶' }}</span>
-                      </td>
-                      <td v-if="columnVisibility.manage_code.visible"><strong>{{ row.node.prefix }}</strong></td>
-                      <td :colspan="visibleColCount - (columnVisibility.manage_code.visible ? 1 : 0)"><strong>{{ row.node.name }}</strong></td>
+                      <td v-if="columnVisibility.manage_code.visible" :style="{ backgroundColor: row.node.color }"><span class="expand-icon">{{ expandedGroups.has(row.node.prefix) ? '▼' : '▶' }}</span> <strong>{{ row.node.prefix }}</strong></td>
+                      <td :colspan="visibleColCount - (columnVisibility.manage_code.visible ? 1 : 0)" :style="{ backgroundColor: row.node.color }"><strong>{{ row.node.name }}</strong></td>
                     </tr>
 
                     <!-- Items / Flat Rows -->
                     <tr v-else class="item-row" :class="{ 'single-item-row': !row.idxInGroup && row.idxInGroup !== 0 }" :style="{ backgroundColor: row.color || '#fff' }">
-                      <td :style="{ backgroundColor: row.color || '#fff', textAlign: 'center', color: '#888', fontSize: '11px', position: 'sticky', left: 0, zIndex: 1, borderRight: '1px solid #ddd' }">
-                        {{ (row.idxInGroup !== undefined) ? (row.idxInGroup + 1) : '-' }}
-                      </td>
                       
                       <td v-for="(key, cIdx) in visibleColsKeys" :key="key"
                           @mousedown.stop="onMouseDown(row.rIdx, cIdx, $event)"
