@@ -1,3 +1,4 @@
+<template>
   <!-- Top Off-canvas Menu -->
   <div class="off-canvas-menu" :class="{ 'active': showOffCanvas }">
     <div class="menu-inner">
