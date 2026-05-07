@@ -6,14 +6,6 @@
         <div class="menu-section" v-if="currentView === 'list'">
           <h3>🛠️ 데이터 관리</h3>
           <div class="menu-actions">
-            <button class="excel-download-btn" @click="openDownloadModal">
-              📥 엑셀 다운로드
-              <span v-if="modifiedIds.size > 0" class="modified-badge">{{ modifiedIds.size }}</span>
-            </button>
-            <label class="group-toggle">
-              <input type="checkbox" v-model="isGroupView" />
-              <span>그룹으로 묶어보기</span>
-            </label>
             <button class="add-toggle-btn" @click="showAddCanvas = true; showOffCanvas = false">
               ➕ 새 상품 등록 열기
             </button>
@@ -28,12 +20,14 @@
             v-for="(key, index) in columnOrder" 
             :key="key" 
             class="vis-label draggable-col"
+            :class="{ active: columnVisibility[key].visible }"
             draggable="true"
             @dragstart="onColDragStart(index)"
             @dragover.prevent
             @drop="onColDrop(index)"
+            @click="columnVisibility[key].visible = !columnVisibility[key].visible"
           >
-            <input type="checkbox" v-model="columnVisibility[key].visible" /> {{ defaultCols[key].label }}
+            {{ defaultCols[key].label }}
           </div>
         </div>
       </div>
@@ -89,21 +83,6 @@
         </div>
       </div>
 
-      <!-- Right Sidebar Tabs -->
-      <aside class="sidebar-right">
-        <div class="sidebar-scroll">
-          <button 
-            v-for="tab in allTabs()" 
-            :key="tab"
-            :class="{ 'active': activeTab === tab, 'loading': loadingTabs.has(tab) }"
-            @click="selectTab(tab)"
-            :disabled="loadingTabs.has(tab)"
-          >
-            <span class="tab-text">{{ tab }}</span>
-            <span v-if="loadingTabs.has(tab)" class="loading-dot">●</span>
-          </button>
-        </div>
-      </aside>
     </div>
   </div>
 
@@ -120,6 +99,14 @@
         <button class="upload-btn-top" @click="showUploadModal = true">
           <span class="icon">📤</span> 엑셀 업로드
         </button>
+        <button class="excel-download-btn" @click="openDownloadModal">
+          📥 엑셀 다운로드
+          <span v-if="modifiedIds.size > 0" class="modified-badge">{{ modifiedIds.size }}</span>
+        </button>
+        <label class="group-toggle">
+          <input type="checkbox" v-model="isGroupView" />
+          <span>그룹 보기</span>
+        </label>
       </div>
       <h1 class="title">STOCK MASTER</h1>
       <div class="status-indicators">
@@ -248,6 +235,21 @@
         </div>
       </div>
 
+      <!-- Right Sidebar Tabs -->
+      <aside class="sidebar-right">
+        <div class="sidebar-scroll">
+          <button 
+            v-for="tab in allTabs()" 
+            :key="tab"
+            :class="{ 'active': activeTab === tab, 'loading': loadingTabs.has(tab) }"
+            @click="selectTab(tab)"
+            :disabled="loadingTabs.has(tab)"
+          >
+            <span class="tab-text">{{ tab }}</span>
+            <span v-if="loadingTabs.has(tab)" class="loading-dot">●</span>
+          </button>
+        </div>
+      </aside>
     </div>
   </div>
 
@@ -658,6 +660,10 @@ function allTabs() {
 const searchQuery = ref('');
 
 async function loadTab(tab, forceSearch = false) {
+  if (tab === '🔍 검색' && !forceSearch) {
+    if (!tabProducts.value[tab]) tabProducts.value[tab] = [];
+    return;
+  }
   if (!forceSearch && (tabProducts.value[tab] || loadingTabs.value.has(tab))) return;
   loadingTabs.value.add(tab);
   
