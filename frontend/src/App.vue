@@ -88,6 +88,22 @@
           <button class="submit-btn" @click="doBatchAdd">🚀 상품 등록하기</button>
         </div>
       </div>
+
+      <!-- Right Sidebar Tabs -->
+      <aside class="sidebar-right">
+        <div class="sidebar-scroll">
+          <button 
+            v-for="tab in allTabs()" 
+            :key="tab"
+            :class="{ 'active': activeTab === tab, 'loading': loadingTabs.has(tab) }"
+            @click="selectTab(tab)"
+            :disabled="loadingTabs.has(tab)"
+          >
+            <span class="tab-text">{{ tab }}</span>
+            <span v-if="loadingTabs.has(tab)" class="loading-dot">●</span>
+          </button>
+        </div>
+      </aside>
     </div>
   </div>
 
@@ -112,22 +128,6 @@
     </header>
 
     <div class="workspace">
-      <!-- Top Sidebar Tabs (Alphabet) -->
-      <aside class="sidebar-right">
-        <div class="sidebar-scroll">
-          <button 
-            v-for="tab in allTabs()" 
-            :key="tab"
-            :class="{ 'active': activeTab === tab, 'loading': loadingTabs.has(tab) }"
-            @click="selectTab(tab)"
-            :disabled="loadingTabs.has(tab)"
-          >
-            <span class="tab-text">{{ tab }}</span>
-            <span v-if="loadingTabs.has(tab)" class="loading-dot">●</span>
-          </button>
-        </div>
-      </aside>
-
       <!-- Main Content Area -->
       <div class="content-area">
         <div class="list-view">
@@ -597,7 +597,7 @@ async function doDownloadExcel() {
 }
 
 onMounted(() => {
-  selectTab('🔍 검색');
+  selectTab('A');
 
   const savedVis = localStorage.getItem('columnVisibility');
   if (savedVis) {
