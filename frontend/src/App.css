@@ -162,6 +162,8 @@ body {
 }
 
 .left-actions { display: flex; align-items: center; gap: 8px; }
+.right-actions { display: flex; align-items: center; gap: 12px; }
+.sidebar-toggle-btn { font-size: 13px !important; padding: 6px 12px !important; }
 
 .group-toggle {
   display: flex;
@@ -204,6 +206,7 @@ body {
   flex: 1;
   overflow: hidden;
   padding: 24px;
+  padding-bottom: 16px;
   display: flex;
   flex-direction: column;
   height: 100%;

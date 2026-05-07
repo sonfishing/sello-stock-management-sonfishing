@@ -101,8 +101,11 @@
         </label>
       </div>
       <h1 class="title">STOCK MASTER</h1>
-      <div class="status-indicators">
+      <div class="right-actions">
         <span v-if="modifiedIds.size > 0" class="status-badge modified">수정된 항목: {{ modifiedIds.size }}</span>
+        <button class="menu-btn sidebar-toggle-btn" @click="showSidebar = !showSidebar">
+          {{ showSidebar ? '◀' : '▶' }} 탭
+        </button>
       </div>
     </header>
 
@@ -228,7 +231,7 @@
       </div>
 
       <!-- Right Sidebar Tabs -->
-      <aside class="sidebar-right">
+      <aside v-if="showSidebar" class="sidebar-right">
         <div class="sidebar-scroll">
           <button 
             v-for="tab in allTabs()" 
@@ -324,6 +327,7 @@ const showOffCanvas = ref(false);
 const showAddCanvas = ref(false);
 const showUploadModal = ref(false);
 const showDownloadModal = ref(false);
+const showSidebar = ref(true);
 
 function addToast(message) {
   const id = Date.now() + Math.random();
