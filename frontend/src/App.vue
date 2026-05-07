@@ -150,7 +150,10 @@
               <table class="product-table" @dragstart.prevent>
                 <thead>
                   <tr>
-                    <th class="th-no" style="position: sticky; left: 0; z-index: 2; background: #f8f9fa;">No</th>
+                    <th class="th-no resizable-th" style="position: sticky; left: 0; z-index: 2; background: var(--bg-main);" :style="{ width: colWidths['No'] + 'px', minWidth: '40px' }">
+                      <span class="th-label">No</span>
+                      <span class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, 'No')"></span>
+                    </th>
                     <th
                       v-for="key in visibleColsKeys"
                       :key="key"
@@ -442,6 +445,7 @@ const visibleColCount = computed(() => visibleColsKeys.value.length);
 const DEFAULT_COL_WIDTHS = Object.fromEntries(
   Object.entries(defaultCols).map(([k, v]) => [k, parseInt(v.width) || 120])
 );
+DEFAULT_COL_WIDTHS['No'] = 50;
 const colWidths = ref({ ...DEFAULT_COL_WIDTHS });
 
 let resizingKey = null;
@@ -597,7 +601,7 @@ async function doDownloadExcel() {
 }
 
 onMounted(() => {
-  selectTab('A');
+  selectTab('🔍 검색');
 
   const savedVis = localStorage.getItem('columnVisibility');
   if (savedVis) {
@@ -654,10 +658,6 @@ function allTabs() {
 const searchQuery = ref('');
 
 async function loadTab(tab, forceSearch = false) {
-  if (tab === '🔍 검색' && !forceSearch) {
-    if (!tabProducts.value[tab]) tabProducts.value[tab] = [];
-    return;
-  }
   if (!forceSearch && (tabProducts.value[tab] || loadingTabs.value.has(tab))) return;
   loadingTabs.value.add(tab);
   
