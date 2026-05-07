@@ -1120,5 +1120,3 @@ function selectTab(tab) {
   loadTab(tab);
 }
 </script>
-
-</style>
