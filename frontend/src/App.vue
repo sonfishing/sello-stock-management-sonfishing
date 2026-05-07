@@ -83,21 +83,21 @@
     <header class="top-bar">
       <div class="left-actions">
         <button class="menu-btn" @click="showOffCanvas = !showOffCanvas">
-          <span class="icon">⚙️</span> 설정
+          <span class="icon">⚙️</span><span class="btn-label"> 설정</span>
         </button>
         <button class="add-btn-top" @click="showAddCanvas = true">
-          <span class="icon">➕</span> 상품 등록
+          <span class="icon">➕</span><span class="btn-label"> 상품 등록</span>
         </button>
         <button class="upload-btn-top" @click="showUploadModal = true">
-          <span class="icon">📤</span> 엑셀 업로드
+          <span class="icon">📤</span><span class="btn-label"> 엑셀 업로드</span>
         </button>
         <button class="excel-download-btn" @click="openDownloadModal">
-          📥 엑셀 다운로드
+          <span class="icon">📥</span><span class="btn-label"> 다운로드</span>
           <span v-if="modifiedIds.size > 0" class="modified-badge">{{ modifiedIds.size }}</span>
         </button>
         <label class="group-toggle">
           <input type="checkbox" v-model="isGroupView" />
-          <span>그룹 보기</span>
+          <span class="btn-label">그룹 보기</span>
         </label>
       </div>
       <h1 class="title">STOCK MASTER</h1>
@@ -134,7 +134,7 @@
                   <tr>
                     <th class="th-no resizable-th" style="position: sticky; left: 0; z-index: 2; background: var(--bg-main);" :style="{ width: colWidths['No'] + 'px', minWidth: '40px' }">
                       <span class="th-label">No</span>
-                      <span class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, 'No')"></span>
+                      <span class="col-resize-handle" @mousedown.stop.prevent="startColResize($event, 'No')" @touchstart.stop.prevent="startColResize($event, 'No')"></span>
                     </th>
                     <th
                       v-for="key in visibleColsKeys"
@@ -146,6 +146,7 @@
                       <span
                         class="col-resize-handle"
                         @mousedown.stop.prevent="startColResize($event, key)"
+                        @touchstart.stop.prevent="startColResize($event, key)"
                       ></span>
                     </th>
                   </tr>
@@ -261,43 +262,51 @@
 
   <!-- Excel Download Modal -->
   <div v-if="showDownloadModal" class="modal-overlay" @click.self="showDownloadModal = false">
-    <div class="modal-box">
-      <h2 class="modal-title">📥 엑셀 다운로드 설정</h2>
+    <div class="modal-box download-modal">
+      <div class="modal-header-row">
+        <h2 class="modal-title">📥 엑셀 다운로드</h2>
+        <button class="modal-close-btn" @click="showDownloadModal = false">&times;</button>
+      </div>
 
       <div class="modal-section">
         <label class="modal-label">다운로드 범위</label>
-        <div class="radio-group">
-          <label>
-            <input type="radio" v-model="downloadMode" value="all" /> 전체 (현재 탭)
-          </label>
-          <label :class="{ disabled: modifiedIds.size === 0 }">
-            <input type="radio" v-model="downloadMode" value="modified" :disabled="modifiedIds.size === 0" />
-            수정된 항목만
-            <span class="badge">{{ modifiedIds.size }}개</span>
-          </label>
+        <div class="dl-range-group">
+          <button 
+            class="dl-range-btn" 
+            :class="{ active: downloadMode === 'all' }" 
+            @click="downloadMode = 'all'"
+          >📋 전체 (현재 탭)</button>
+          <button 
+            class="dl-range-btn" 
+            :class="{ active: downloadMode === 'modified', disabled: modifiedIds.size === 0 }" 
+            @click="modifiedIds.size > 0 && (downloadMode = 'modified')"
+            :disabled="modifiedIds.size === 0"
+          >✏️ 수정된 항목만 <span v-if="modifiedIds.size > 0" class="dl-badge">{{ modifiedIds.size }}</span></button>
         </div>
       </div>
 
       <div class="modal-section">
-        <label class="modal-label">포함할 컬럼 선택</label>
-        <div class="col-check-grid">
-          <label v-for="key in Object.keys(defaultCols)" :key="key" class="col-check-item">
-            <input type="checkbox" v-model="downloadCols[key]" />
-            {{ defaultCols[key].label }}
-          </label>
+        <label class="modal-label">포함할 컬럼</label>
+        <div class="dl-col-chips">
+          <div 
+            v-for="key in Object.keys(defaultCols)" 
+            :key="key" 
+            class="dl-col-chip"
+            :class="{ active: downloadCols[key] }"
+            @click="downloadCols[key] = !downloadCols[key]"
+          >{{ defaultCols[key].label }}</div>
         </div>
       </div>
 
       <div class="modal-section" v-if="modifiedIds.size > 0">
-        <label class="modal-label">수정 기록 관리</label>
         <button class="btn-clear-modified" @click="confirmClearModified">
           🗑️ 수정 내역 초기화 ({{ modifiedIds.size }}개)
         </button>
       </div>
 
       <div class="modal-actions">
-        <button class="btn-cancel" @click="showDownloadModal = false">&times; 취소</button>
-        <button class="btn-download" @click="doDownloadExcel">다운로드</button>
+        <button class="cancel-btn" @click="showDownloadModal = false">취소</button>
+        <button class="submit-btn" @click="doDownloadExcel">📥 다운로드</button>
       </div>
     </div>
   </div>
@@ -452,17 +461,22 @@ let resizeStartW = 0;
 
 function startColResize(event, key) {
   resizingKey = key;
-  resizeStartX = event.clientX;
+  const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+  resizeStartX = clientX;
   resizeStartW = colWidths.value[key];
   document.addEventListener('mousemove', onColResizeMove);
   document.addEventListener('mouseup', stopColResize);
+  document.addEventListener('touchmove', onColResizeMove, { passive: false });
+  document.addEventListener('touchend', stopColResize);
   document.body.style.cursor = 'col-resize';
   document.body.style.userSelect = 'none';
 }
 
 function onColResizeMove(event) {
   if (!resizingKey) return;
-  const delta = event.clientX - resizeStartX;
+  if (event.cancelable) event.preventDefault();
+  const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+  const delta = clientX - resizeStartX;
   colWidths.value[resizingKey] = Math.max(40, resizeStartW + delta);
 }
 
@@ -470,6 +484,8 @@ function stopColResize() {
   resizingKey = null;
   document.removeEventListener('mousemove', onColResizeMove);
   document.removeEventListener('mouseup', stopColResize);
+  document.removeEventListener('touchmove', onColResizeMove);
+  document.removeEventListener('touchend', stopColResize);
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
   // Persist widths
