@@ -151,8 +151,14 @@
                   <template v-for="row in renderRows" :key="row.isGroupRow ? row.node.id : row.product.id">
                     <!-- Group Row -->
                     <tr v-if="row.isGroupRow" class="group-row" @click="toggleGroup(row.node.prefix)" :style="{ backgroundColor: row.node.color }">
-                      <td v-if="columnVisibility.manage_code.visible" :style="{ backgroundColor: row.node.color }"><span class="expand-icon">{{ expandedGroups.has(row.node.prefix) ? '▼' : '▶' }}</span> <strong>{{ row.node.prefix }}</strong></td>
-                      <td :colspan="visibleColCount - (columnVisibility.manage_code.visible ? 1 : 0)" :style="{ backgroundColor: row.node.color }"><strong>{{ row.node.name }}</strong></td>
+                      <td v-for="key in visibleColsKeys" :key="key" :style="{ backgroundColor: row.node.color }">
+                        <template v-if="key === 'manage_code'">
+                          <span class="expand-icon">{{ expandedGroups.has(row.node.prefix) ? '▼' : '▶' }}</span> <strong>{{ row.node.prefix }}</strong>
+                        </template>
+                        <template v-else-if="key === 'manage_name'">
+                          <strong>{{ row.node.name }}</strong>
+                        </template>
+                      </td>
                     </tr>
 
                     <!-- Items / Flat Rows -->
