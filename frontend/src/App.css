@@ -288,6 +288,32 @@ body {
 
 .padding-cell { padding: 6px 10px; min-height: 20px; display: block; }
 
+/* Inline Edit (Excel-like seamless editing) */
+.full-input.edit-active {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  background: #fff;
+  padding: 6px 10px;
+  margin: 0;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  display: block;
+}
+.full-input.edit-active:focus {
+  background: #fff;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+select.full-input.edit-active {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
 /* Resize Handle */
 .resizable-th { position: relative; }
 .col-resize-handle {
