@@ -301,7 +301,7 @@
       </div>
 
       <div class="modal-actions">
-        <button class="btn-cancel" @click="showDownloadModal = false">취소</button>
+        <button class="btn-cancel" @click="showDownloadModal = false">&times; 취소</button>
         <button class="btn-download" @click="doDownloadExcel">다운로드</button>
       </div>
     </div>
