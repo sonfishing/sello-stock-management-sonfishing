@@ -2,16 +2,7 @@
   <!-- Top Off-canvas Menu (Settings/Columns) -->
   <div class="off-canvas-menu" :class="{ 'active': showOffCanvas }">
     <div class="menu-inner">
-      <div class="menu-grid">
-        <div class="menu-section" v-if="currentView === 'list'">
-          <h3>🛠️ 데이터 관리</h3>
-          <div class="menu-actions">
-            <button class="add-toggle-btn" @click="showAddCanvas = true; showOffCanvas = false">
-              ➕ 새 상품 등록 열기
-            </button>
-          </div>
-        </div>
-      </div>
+      <button class="close-menu-btn-top" @click="showOffCanvas = false">&times;</button>
 
       <div class="menu-section columns-section" v-if="currentView === 'list'">
         <h3>📊 컬럼 표시 및 순서 (드래그)</h3>
@@ -32,7 +23,8 @@
         </div>
       </div>
       
-      <div class="menu-footer">
+      
+      <div class="menu-footer" style="display: none;">
         <button class="close-menu-btn" @click="showOffCanvas = false">닫기</button>
       </div>
     </div>
