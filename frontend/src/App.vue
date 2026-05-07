@@ -1,226 +1,257 @@
-<template>
-  <div id="app">
-    <nav>
-      <button @click="currentView = 'list'">상품 목록</button>
-      <button @click="currentView = 'upload'">엑셀 업로드</button>
-    </nav>
-    
-    <ProductUpload v-if="currentView === 'upload'" />
-    
-    <!-- Toast Container -->
-    <div class="toast-container">
-      <div v-for="toast in toastMessages" :key="toast.id" class="toast">
-        {{ toast.text }}
-      </div>
-    </div>
+  <!-- Top Off-canvas Menu -->
+  <div class="off-canvas-menu" :class="{ 'active': showOffCanvas }">
+    <div class="menu-inner">
+      <div class="menu-grid">
+        <div class="menu-section">
+          <h3>🚀 보기 전환</h3>
+          <nav class="view-nav">
+            <button :class="{ 'active': currentView === 'list' }" @click="currentView = 'list'; showOffCanvas = false">📦 상품 목록</button>
+            <button :class="{ 'active': currentView === 'upload' }" @click="currentView = 'upload'; showOffCanvas = false">📤 엑셀 업로드</button>
+          </nav>
+        </div>
 
-    <div v-if="currentView === 'list'">
-      <div class="header-container">
-        <h1>재고 대시보드</h1>
-        <div class="header-actions">
-          <button class="excel-download-btn" @click="openDownloadModal">
-            📥 엑셀 다운로드
-            <span v-if="modifiedIds.size > 0" class="modified-badge">{{ modifiedIds.size }}</span>
-          </button>
-          <label class="group-toggle">
-            <input type="checkbox" v-model="isGroupView" />
-            <span>그룹으로 묶어보기</span>
-          </label>
+        <div class="menu-section" v-if="currentView === 'list'">
+          <h3>🛠️ 데이터 관리</h3>
+          <div class="menu-actions">
+            <button class="excel-download-btn" @click="openDownloadModal">
+              📥 엑셀 다운로드
+              <span v-if="modifiedIds.size > 0" class="modified-badge">{{ modifiedIds.size }}</span>
+            </button>
+            <label class="group-toggle">
+              <input type="checkbox" v-model="isGroupView" />
+              <span>그룹으로 묶어보기</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="menu-section" v-if="currentView === 'list'">
+          <h3>➕ 새 상품 추가</h3>
+          <div class="add-product-compact">
+            <input v-model="newProduct.manage_code" placeholder="관리 코드" />
+            <input v-model="newProduct.manage_name" placeholder="상품명" />
+            <input v-model.number="newProduct.quantity" placeholder="수량" type="number" />
+            <input v-model.number="newProduct.purchase_price" placeholder="매입가" type="number" />
+            <button @click="addProduct">추가</button>
+          </div>
         </div>
       </div>
 
-      <!-- Excel Download Modal -->
-      <div v-if="showDownloadModal" class="modal-overlay" @click.self="showDownloadModal = false">
-        <div class="modal-box">
-          <h2 class="modal-title">📥 엑셀 다운로드</h2>
-
-          <div class="modal-section">
-            <label class="modal-label">다운로드 범위</label>
-            <div class="radio-group">
-              <label>
-                <input type="radio" v-model="downloadMode" value="all" /> 전체 (현재 탭)
-              </label>
-              <label :class="{ disabled: modifiedIds.size === 0 }">
-                <input type="radio" v-model="downloadMode" value="modified" :disabled="modifiedIds.size === 0" />
-                수정된 항목만
-                <span class="badge">{{ modifiedIds.size }}개</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="modal-section">
-            <label class="modal-label">포함할 컬럼 선택</label>
-            <div class="col-check-grid">
-              <label v-for="key in Object.keys(defaultCols)" :key="key" class="col-check-item">
-                <input type="checkbox" v-model="downloadCols[key]" />
-                {{ defaultCols[key].label }}
-              </label>
-            </div>
-          </div>
-
-          <div class="modal-section" v-if="modifiedIds.size > 0">
-            <label class="modal-label">수정 기록 관리</label>
-            <button class="btn-clear-modified" @click="confirmClearModified">
-              🗑️ 수정 내역 초기화 ({{ modifiedIds.size }}개)
-            </button>
-          </div>
-
-          <div class="modal-actions">
-            <button class="btn-cancel" @click="showDownloadModal = false">취소</button>
-            <button class="btn-download" @click="doDownloadExcel">다운로드</button>
+      <div class="menu-section columns-section" v-if="currentView === 'list'">
+        <h3>📊 컬럼 표시 및 순서 (드래그)</h3>
+        <div class="column-visibility-grid">
+          <div 
+            v-for="(key, index) in columnOrder" 
+            :key="key" 
+            class="vis-label draggable-col"
+            draggable="true"
+            @dragstart="onColDragStart(index)"
+            @dragover.prevent
+            @drop="onColDrop(index)"
+          >
+            <input type="checkbox" v-model="columnVisibility[key].visible" /> {{ defaultCols[key].label }}
           </div>
         </div>
       </div>
       
-      <!-- Field Visibility & Ordering Checklist -->
-      <div class="column-visibility-container">
-        <strong>표시 및 순서 (드래그하여 순서 변경): </strong>
-        <div 
-          v-for="(key, index) in columnOrder" 
-          :key="key" 
-          class="vis-label draggable-col"
-          draggable="true"
-          @dragstart="onColDragStart(index)"
-          @dragover.prevent
-          @drop="onColDrop(index)"
-        >
-          <input type="checkbox" v-model="columnVisibility[key].visible" /> {{ defaultCols[key].label }}
-        </div>
-      </div>
-
-      <div class="add-product">
-        <h2>새 상품 추가</h2>
-        <input v-model="newProduct.manage_code" placeholder="관리 코드" />
-        <input v-model="newProduct.manage_name" placeholder="상품명" />
-        <input v-model.number="newProduct.quantity" placeholder="수량" type="number" />
-        <input v-model.number="newProduct.purchase_price" placeholder="매입가" type="number" />
-        <button @click="addProduct">상품 추가</button>
-      </div>
-
-      <!-- Tab Navigation -->
-      <div class="tab-navigation">
-        <button 
-          v-for="tab in allTabs()" 
-          :key="tab"
-          :class="{ 'active': activeTab === tab, 'loading': loadingTabs.has(tab) }"
-          @click="selectTab(tab)"
-          :disabled="loadingTabs.has(tab)"
-        >
-          {{ tab }}
-          <span v-if="loadingTabs.has(tab)" class="loading-dot">●</span>
-        </button>
-      </div>
-
-      <!-- Search Input -->
-      <div v-if="activeTab === '🔍 검색'" class="search-container">
-        <input 
-          v-model="searchQuery" 
-          placeholder="검색어 (관리코드 또는 상품명 일부 입력)" 
-          @keyup.enter="loadTab('🔍 검색', true)" 
-        />
-        <button @click="loadTab('🔍 검색', true)">검색</button>
-      </div>
-
-      <!-- Products Table for Active Tab -->
-      <div v-if="activeTab" class="table-wrapper">
-        <table class="product-table" @dragstart.prevent>
-          <thead>
-            <tr>
-              <th class="th-no" style="position: sticky; left: 0; z-index: 2; background: #f5f5f5;">No</th>
-              <th
-                v-for="key in visibleColsKeys"
-                :key="key"
-                class="resizable-th"
-                :style="{ width: colWidths[key] + 'px', minWidth: '40px' }"
-              >
-                <span class="th-label">{{ defaultCols[key].label }}</span>
-                <span
-                  class="col-resize-handle"
-                  @mousedown.stop.prevent="startColResize($event, key)"
-                ></span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="row in renderRows" :key="row.isGroupRow ? row.node.id : row.product.id">
-              <!-- Group Row -->
-              <tr v-if="row.isGroupRow" class="group-row" @click="toggleGroup(row.node.prefix)" :style="{ backgroundColor: row.node.color }">
-                <td :style="{ backgroundColor: row.node.color, textAlign: 'center', position: 'sticky', left: 0, zIndex: 1, borderRight: '1px solid #ddd' }">
-                  <span class="expand-icon">{{ expandedGroups.has(row.node.prefix) ? '▼' : '▶' }}</span>
-                </td>
-                <td v-if="columnVisibility.manage_code.visible"><strong>{{ row.node.prefix }}</strong></td>
-                <td :colspan="visibleColCount - (columnVisibility.manage_code.visible ? 1 : 0)"><strong>{{ row.node.name }}</strong></td>
-              </tr>
-
-              <!-- Items / Flat Rows -->
-              <tr v-else class="item-row" :class="{ 'single-item-row': !row.idxInGroup && row.idxInGroup !== 0 }" :style="{ backgroundColor: row.color || '#fff' }">
-                <td :style="{ backgroundColor: row.color || '#fff', textAlign: 'center', color: '#888', fontSize: '11px', position: 'sticky', left: 0, zIndex: 1, borderRight: '1px solid #ddd' }">
-                  {{ (row.idxInGroup !== undefined) ? (row.idxInGroup + 1) : '-' }}
-                </td>
-                
-                <td v-for="(key, cIdx) in visibleColsKeys" :key="key"
-                    @mousedown.stop="onMouseDown(row.rIdx, cIdx, $event)"
-                    @mouseenter="onMouseEnter(row.rIdx, cIdx)"
-                    @dblclick="onDoubleClick(row.rIdx, cIdx)"
-                    :class="{ 'cell-selected': isSelected(row.rIdx, cIdx) }"
-                    class="excel-cell">
-                  
-                  <template v-if="isEditing(row.rIdx, cIdx)">
-                    <select v-if="key === 'is_hidden'"
-                       class="full-input edit-active" 
-                       :id="'edit-'+row.rIdx+'-'+cIdx" 
-                       :value="row.product[key] ? 'true' : 'false'" 
-                       @blur="closeAndSave(row.product, key, $event.target.value === 'true')">
-                      <option value="false">노출</option>
-                      <option value="true">숨김</option>
-                    </select>
-                    
-                    <input v-else-if="defaultCols[key].type === 'number'"
-                       type="number"
-                       class="full-input edit-active" 
-                       :id="'edit-'+row.rIdx+'-'+cIdx" 
-                       :value="row.product[key]" 
-                       @blur="closeAndSave(row.product, key, $event.target.valueAsNumber)"
-                       @keydown.enter="$event.target.blur()" />
-
-                    <template v-else-if="key === 'updated_at'">
-                      <div class="padding-cell text-muted">{{ formatDate(row.product.updated_at) }}</div>
-                    </template>
-
-                    <input v-else
-                       class="full-input edit-active" 
-                       :id="'edit-'+row.rIdx+'-'+cIdx" 
-                       :value="row.product[key]" 
-                       @blur="closeAndSave(row.product, key, $event.target.value)"
-                       @keydown.enter="$event.target.blur()" />
-                  </template>
-
-                  <!-- Standard readable view -->
-                  <template v-else>
-                    <div class="padding-cell text-content">
-                       <template v-if="key === 'is_hidden'">{{ row.product.is_hidden ? '숨김' : '노출' }}</template>
-                       <template v-else-if="key === 'updated_at'">
-                         <span class="text-muted">{{ formatDate(row.product.updated_at) }}</span>
-                       </template>
-                       <template v-else-if="key === 'manage_name' && row.idxInGroup !== undefined">
-                         {{ getShortName(row.product.manage_name) }}
-                       </template>
-                       <template v-else>{{ row.product[key] }}</template>
-                    </div>
-                  </template>
-                  
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-
-      <div v-else class="loading-message">
-        탭을 선택하여 상품을 확인하세요
+      <div class="menu-footer">
+        <button class="close-menu-btn" @click="showOffCanvas = false">닫기</button>
       </div>
     </div>
   </div>
+
+  <div class="main-layout" :class="{ 'dimmed': showOffCanvas }">
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <button class="menu-btn" @click="showOffCanvas = !showOffCanvas">
+        <span class="icon">☰</span> 관리 메뉴
+      </button>
+      <h1 class="title">STOCK MASTER</h1>
+      <div class="status-indicators">
+        <span v-if="modifiedIds.size > 0" class="status-badge modified">수정 중: {{ modifiedIds.size }}</span>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <!-- Main Content Area -->
+      <div class="content-area">
+        <ProductUpload v-if="currentView === 'upload'" />
+        
+        <div v-else-if="currentView === 'list'" class="list-view">
+          <!-- Search Input Overlay -->
+          <Transition name="slide-fade">
+            <div v-if="activeTab === '🔍 검색'" class="floating-search">
+              <input 
+                v-model="searchQuery" 
+                placeholder="검색어를 입력하고 Enter를 누르세요" 
+                @keyup.enter="loadTab('🔍 검색', true)" 
+                autofocus
+              />
+              <button @click="loadTab('🔍 검색', true)">검색</button>
+            </div>
+          </Transition>
+
+          <!-- Table Wrapper -->
+          <div class="table-container" v-if="activeTab">
+            <div class="table-wrapper">
+              <table class="product-table" @dragstart.prevent>
+                <thead>
+                  <tr>
+                    <th class="th-no" style="position: sticky; left: 0; z-index: 2; background: #f8f9fa;">No</th>
+                    <th
+                      v-for="key in visibleColsKeys"
+                      :key="key"
+                      class="resizable-th"
+                      :style="{ width: colWidths[key] + 'px', minWidth: '40px' }"
+                    >
+                      <span class="th-label">{{ defaultCols[key].label }}</span>
+                      <span
+                        class="col-resize-handle"
+                        @mousedown.stop.prevent="startColResize($event, key)"
+                      ></span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-for="row in renderRows" :key="row.isGroupRow ? row.node.id : row.product.id">
+                    <!-- Group Row -->
+                    <tr v-if="row.isGroupRow" class="group-row" @click="toggleGroup(row.node.prefix)" :style="{ backgroundColor: row.node.color }">
+                      <td :style="{ backgroundColor: row.node.color, textAlign: 'center', position: 'sticky', left: 0, zIndex: 1, borderRight: '1px solid #ddd' }">
+                        <span class="expand-icon">{{ expandedGroups.has(row.node.prefix) ? '▼' : '▶' }}</span>
+                      </td>
+                      <td v-if="columnVisibility.manage_code.visible"><strong>{{ row.node.prefix }}</strong></td>
+                      <td :colspan="visibleColCount - (columnVisibility.manage_code.visible ? 1 : 0)"><strong>{{ row.node.name }}</strong></td>
+                    </tr>
+
+                    <!-- Items / Flat Rows -->
+                    <tr v-else class="item-row" :class="{ 'single-item-row': !row.idxInGroup && row.idxInGroup !== 0 }" :style="{ backgroundColor: row.color || '#fff' }">
+                      <td :style="{ backgroundColor: row.color || '#fff', textAlign: 'center', color: '#888', fontSize: '11px', position: 'sticky', left: 0, zIndex: 1, borderRight: '1px solid #ddd' }">
+                        {{ (row.idxInGroup !== undefined) ? (row.idxInGroup + 1) : '-' }}
+                      </td>
+                      
+                      <td v-for="(key, cIdx) in visibleColsKeys" :key="key"
+                          @mousedown.stop="onMouseDown(row.rIdx, cIdx, $event)"
+                          @mouseenter="onMouseEnter(row.rIdx, cIdx)"
+                          @dblclick="onDoubleClick(row.rIdx, cIdx)"
+                          :class="{ 'cell-selected': isSelected(row.rIdx, cIdx) }"
+                          class="excel-cell">
+                        
+                        <template v-if="isEditing(row.rIdx, cIdx)">
+                          <select v-if="key === 'is_hidden'"
+                             class="full-input edit-active" 
+                             :id="'edit-'+row.rIdx+'-'+cIdx" 
+                             :value="row.product[key] ? 'true' : 'false'" 
+                             @blur="closeAndSave(row.product, key, $event.target.value === 'true')">
+                            <option value="false">노출</option>
+                            <option value="true">숨김</option>
+                          </select>
+                          
+                          <input v-else-if="defaultCols[key].type === 'number'"
+                             type="number"
+                             class="full-input edit-active" 
+                             :id="'edit-'+row.rIdx+'-'+cIdx" 
+                             :value="row.product[key]" 
+                             @blur="closeAndSave(row.product, key, $event.target.valueAsNumber)"
+                             @keydown.enter="$event.target.blur()" />
+
+                          <template v-else-if="key === 'updated_at'">
+                            <div class="padding-cell text-muted">{{ formatDate(row.product.updated_at) }}</div>
+                          </template>
+
+                          <input v-else
+                             class="full-input edit-active" 
+                             :id="'edit-'+row.rIdx+'-'+cIdx" 
+                             :value="row.product[key]" 
+                             @blur="closeAndSave(row.product, key, $event.target.value)"
+                             @keydown.enter="$event.target.blur()" />
+                        </template>
+
+                        <!-- Standard readable view -->
+                        <template v-else>
+                          <div class="padding-cell text-content">
+                             <template v-if="key === 'is_hidden'">{{ row.product.is_hidden ? '숨김' : '노출' }}</template>
+                             <template v-else-if="key === 'updated_at'">
+                               <span class="text-muted">{{ formatDate(row.product.updated_at) }}</span>
+                             </template>
+                             <template v-else-if="key === 'manage_name' && row.idxInGroup !== undefined">
+                               {{ getShortName(row.product.manage_name) }}
+                             </template>
+                             <template v-else>{{ row.product[key] }}</template>
+                          </div>
+                        </template>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div v-else class="empty-state">
+            탭을 선택하여 데이터를 확인하세요
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Sidebar Tabs -->
+      <aside class="sidebar-right">
+        <div class="sidebar-scroll">
+          <button 
+            v-for="tab in allTabs()" 
+            :key="tab"
+            :class="{ 'active': activeTab === tab, 'loading': loadingTabs.has(tab) }"
+            @click="selectTab(tab)"
+            :disabled="loadingTabs.has(tab)"
+          >
+            <span class="tab-text">{{ tab }}</span>
+            <span v-if="loadingTabs.has(tab)" class="loading-dot">●</span>
+          </button>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Excel Download Modal -->
+  <div v-if="showDownloadModal" class="modal-overlay" @click.self="showDownloadModal = false">
+    <div class="modal-box">
+      <h2 class="modal-title">📥 엑셀 다운로드</h2>
+
+      <div class="modal-section">
+        <label class="modal-label">다운로드 범위</label>
+        <div class="radio-group">
+          <label>
+            <input type="radio" v-model="downloadMode" value="all" /> 전체 (현재 탭)
+          </label>
+          <label :class="{ disabled: modifiedIds.size === 0 }">
+            <input type="radio" v-model="downloadMode" value="modified" :disabled="modifiedIds.size === 0" />
+            수정된 항목만
+            <span class="badge">{{ modifiedIds.size }}개</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-section">
+        <label class="modal-label">포함할 컬럼 선택</label>
+        <div class="col-check-grid">
+          <label v-for="key in Object.keys(defaultCols)" :key="key" class="col-check-item">
+            <input type="checkbox" v-model="downloadCols[key]" />
+            {{ defaultCols[key].label }}
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-section" v-if="modifiedIds.size > 0">
+        <label class="modal-label">수정 기록 관리</label>
+        <button class="btn-clear-modified" @click="confirmClearModified">
+          🗑️ 수정 내역 초기화 ({{ modifiedIds.size }}개)
+        </button>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" @click="showDownloadModal = false">취소</button>
+        <button class="btn-download" @click="doDownloadExcel">다운로드</button>
+      </div>
+    </div>
+  </div>
+
 </template>
 
 <script setup>
@@ -237,6 +268,7 @@ const newProduct = ref({
 const currentView = ref("list");
 const isGroupView = ref(true);
 const toastMessages = ref([]);
+const showOffCanvas = ref(false);
 
 function addToast(message) {
   const id = Date.now() + Math.random();
@@ -1013,191 +1045,317 @@ function selectTab(tab) {
 </script>
 
 <style>
-nav { margin-bottom: 20px; gap: 10px; display: flex; }
-nav button { padding: 10px 20px; background: #1976d2; color: white; border: none; cursor: pointer; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700&display=swap');
 
-.header-container { display: flex; justify-content: space-between; align-items: center; }
-.header-actions { display: flex; align-items: center; gap: 12px; }
-.group-toggle { display: flex; align-items: center; gap: 8px; font-weight: bold; cursor: pointer; background: #f0f0f0; padding: 8px 16px; border-radius: 20px; }
-.group-toggle input { width: 18px; height: 18px; cursor: pointer; }
+:root {
+  --primary: #1976d2;
+  --accent: #2196f3;
+  --bg-main: #f0f2f5;
+  --glass: rgba(255, 255, 255, 0.85);
+  --glass-dark: rgba(255, 255, 255, 0.95);
+  --shadow: 0 8px 32px rgba(0,0,0,0.1);
+  --radius: 12px;
+}
 
-/* Excel Download Button */
-.excel-download-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 18px;
-  background: linear-gradient(135deg, #217346, #2e9e5c);
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-main);
+  color: #333;
+  overflow: hidden; /* App takes full height */
+}
+
+#app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Off-canvas Menu */
+.off-canvas-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  max-height: 80vh;
+  background: var(--glass-dark);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  z-index: 2000;
+  transform: translateY(-100%);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+  border-bottom-left-radius: 20px;
+  border-bottom-right-radius: 20px;
+  overflow-y: auto;
+}
+.off-canvas-menu.active {
+  transform: translateY(0);
+}
+
+.menu-inner {
+  padding: 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 30px;
+  margin-bottom: 30px;
+}
+
+.menu-section h3 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 15px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.view-nav { display: flex; gap: 10px; }
+.view-nav button {
+  flex: 1;
+  padding: 15px;
+  border: 1px solid #ddd;
+  border-radius: var(--radius);
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 600;
+}
+.view-nav button.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+}
+
+.menu-actions { display: flex; flex-direction: column; gap: 15px; }
+
+.add-product-compact { display: flex; flex-direction: column; gap: 8px; }
+.add-product-compact input {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  outline: none;
+}
+.add-product-compact button {
+  padding: 10px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.columns-section { border-top: 1px solid #eee; padding-top: 20px; }
+.column-visibility-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.menu-footer {
+  text-align: center;
+  margin-top: 20px;
+}
+.close-menu-btn {
+  padding: 10px 40px;
+  background: #333;
   color: #fff;
   border: none;
   border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(33,115,70,0.35);
-  transition: filter 0.15s, box-shadow 0.15s;
-}
-.excel-download-btn:hover { filter: brightness(1.1); box-shadow: 0 4px 12px rgba(33,115,70,0.45); }
-.modified-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #ff5252;
-  color: #fff;
-  border-radius: 10px;
-  font-size: 11px;
   font-weight: bold;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
 }
 
-/* Modal */
-.modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.45);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 10000;
+/* Main Layout */
+.main-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  transition: filter 0.4s;
 }
-.modal-box {
-  background: #fff;
-  border-radius: 12px;
-  padding: 32px;
-  min-width: 420px;
-  max-width: 560px;
-  width: 90%;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.2);
+.main-layout.dimmed {
+  filter: blur(4px) brightness(0.9);
+  pointer-events: none;
 }
-.modal-title { margin: 0 0 24px; font-size: 20px; color: #1a1a2e; }
-.modal-section { margin-bottom: 20px; }
-.modal-label { display: block; font-weight: 600; font-size: 13px; color: #555; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-.radio-group { display: flex; gap: 20px; flex-wrap: wrap; }
-.radio-group label { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
-.radio-group label.disabled { opacity: 0.45; cursor: not-allowed; }
-.badge { display: inline-block; background: #e8f4ff; color: #1976d2; border-radius: 10px; padding: 1px 8px; font-size: 12px; font-weight: 600; margin-left: 4px; }
-.col-check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
-.col-check-item { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; padding: 6px 10px; border: 1px solid #e0e0e0; border-radius: 6px; transition: background 0.15s; }
-.col-check-item:hover { background: #f0f4ff; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
-.btn-cancel { padding: 9px 20px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; font-size: 14px; }
-.btn-cancel:hover { background: #f5f5f5; }
-.btn-download { padding: 9px 24px; border: none; border-radius: 6px; background: linear-gradient(135deg, #217346, #2e9e5c); color: #fff; cursor: pointer; font-size: 14px; font-weight: 600; }
-.btn-download:hover { filter: brightness(1.1); }
-.btn-clear-modified {
-  width: 100%;
-  padding: 10px;
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 60px;
   background: #fff;
-  border: 1px solid #ff5252;
-  color: #ff5252;
-  border-radius: 6px;
+  border-bottom: 1px solid #e0e0e0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.menu-btn {
+  background: #f5f5f7;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 18px;
   cursor: pointer;
-  font-size: 14px;
   font-weight: 600;
-  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
 }
-.btn-clear-modified:hover {
-  background: #fff5f5;
-  box-shadow: 0 2px 4px rgba(255, 82, 82, 0.1);
+.menu-btn:hover { background: #eaeaec; }
+
+.title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: -0.5px;
 }
 
-.column-visibility-container { background: #fdfdfd; border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.vis-label { display:flex; align-items:center; gap:4px; font-size:13px; cursor:pointer; padding: 4px 8px; background: #eee; border-radius: 4px; }
-.draggable-col { cursor: grab; border: 1px solid #ccc; }
-.draggable-col:active { cursor: grabbing; }
-
-.add-product { margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 8px; }
-.add-product input { margin-right: 10px; padding: 8px; }
-.add-product h2 { margin-top: 0; }
-
-.tab-navigation { display: flex; flex-wrap: wrap; gap: 5px; margin: 20px 0; }
-.tab-navigation button { padding: 8px 12px; background: #e0e0e0; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; position: relative; }
-.tab-navigation button.active { background: #1976d2; color: white; }
-.tab-navigation button.loading { opacity: 0.7; cursor: wait; }
-.tab-navigation button.loading .loading-dot { position: absolute; right: -8px; top: 50%; transform: translateY(-50%); font-size: 10px; color: #1976d2; animation: blink 1s infinite; }
-@keyframes blink { 0%, 50% { opacity: 0; } 51%, 100% { opacity: 1; } }
-
-.search-container { display: flex; gap: 10px; margin-bottom: 20px; background: #fdfdfd; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
-.search-container input { flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #ccc; font-size: 16px; }
-.search-container button { padding: 10px 24px; background: #1976d2; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
-
-.loading-message { text-align: center; padding: 40px; color: #666; font-style: italic; }
-
-.table-wrapper { overflow-x: auto; border: 1px solid #ddd; max-height: 80vh; }
-
-.product-table { border-collapse: collapse; white-space: nowrap; user-select: none; table-layout: fixed; }
-.product-table th, .product-table td { border: 1px solid #ddd; text-align: left; padding: 0; overflow: hidden; }
-.product-table th { background: #f5f5f5; font-weight: bold; padding: 0; }
-.th-no { width: 50px; min-width: 50px; padding: 8px !important; }
-
-/* Resizable Column Header */
-.resizable-th {
-  position: relative;
-  padding: 0;
-  overflow: visible;
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 15px;
+  font-size: 12px;
+  font-weight: 700;
 }
-.th-label {
-  display: block;
-  padding: 8px;
-  white-space: nowrap;
+.status-badge.modified { background: #fff1f1; color: #ff5252; border: 1px solid #ff5252; }
+
+.workspace {
+  flex: 1;
+  display: flex;
   overflow: hidden;
-  text-overflow: ellipsis;
-}
-.col-resize-handle {
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 6px;
-  height: 100%;
-  cursor: col-resize;
-  z-index: 3;
-  background: transparent;
-  transition: background 0.15s;
-}
-.col-resize-handle:hover, .col-resize-handle:active {
-  background: rgba(25, 118, 210, 0.35);
 }
 
-.padding-cell { display: block; padding: 8px; min-height: 18px;}
-.text-muted { color: #666; }
-
-.group-row { cursor: pointer; background: #eaeff5; }
-.group-row td { border-top: 2px solid #ccc; border-bottom: 2px solid #ccc; padding: 8px; }
-.group-row:hover { background: #dce4f0; }
-
-.item-row { background: #ffffff; }
-
-/* Single items outside groups */
-.single-item-row td { border-top: 2px solid #bbb; border-bottom: 2px solid #bbb; }
-
-/* Excel Cell interactions */
-.excel-cell {
+/* Content Area */
+.content-area {
+  flex: 1;
+  overflow: hidden;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
   position: relative;
-  cursor: cell;
-}
-.cell-selected {
-  outline: 2px solid #1976d2;
-  outline-offset: -2px;
-  background-color: rgba(25, 118, 210, 0.1);
 }
 
-.full-input {
-  width: 100%;
+.floating-search {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: #fff;
+  padding: 12px 20px;
+  border-radius: 30px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  display: flex;
+  gap: 10px;
+  width: 400px;
+}
+.floating-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 14px;
+}
+.floating-search button {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+.table-container {
+  flex: 1;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+  border: 1px solid #eee;
+}
+
+.table-wrapper {
   height: 100%;
-  min-height: 34px;
-  box-sizing: border-box;
-  padding: 8px;
+  overflow: auto;
+}
+
+/* Sidebar Right */
+.sidebar-right {
+  width: 70px;
+  background: #fff;
+  border-left: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0;
+}
+
+.sidebar-scroll button {
+  width: 100%;
+  height: 60px;
   border: none;
   background: transparent;
-  outline: none;
-  font-family: inherit;
-  font-size: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.2s;
+  color: #666;
+  position: relative;
 }
-.full-input:focus { background: #fff; box-shadow: inset 0 0 0 2px #1976d2; cursor: text; }
-.expand-icon { font-size: 12px; color: #666; }
 
-.toast-container { position: fixed; bottom: 30px; right: 30px; display: flex; flex-direction: column; gap: 10px; z-index: 9999; }
-.toast { background: rgba(0, 0, 0, 0.85); color: #fff; padding: 12px 24px; border-radius: 6px; font-size: 14px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); animation: slideIn 0.2s ease-out, fadeOut 0.2s ease-in 1.8s forwards; }
-@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-@keyframes fadeOut { to { opacity: 0; } }
+.sidebar-scroll button.active {
+  color: var(--primary);
+  background: #f0f7ff;
+}
+.sidebar-scroll button.active::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 15%;
+  height: 70%;
+  width: 4px;
+  background: var(--primary);
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+}
+
+.tab-text {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Transitions */
+.slide-fade-enter-active { transition: all 0.3s ease-out; }
+.slide-fade-leave-active { transition: all 0.2s cubic-bezier(1, 0.5, 0.8, 1); }
+.slide-fade-enter-from, .slide-fade-leave-to { transform: translateY(-20px); opacity: 0; }
+
+/* Excel Styling refinement */
+.product-table { width: 100%; font-size: 13px; table-layout: fixed; }
+.product-table th { background: #f8f9fa; border-bottom: 2px solid #eee; color: #444; }
+.product-table td { padding: 0; border: 0.5px solid #efefef; }
+.excel-cell { transition: background 0.1s; }
+.excel-cell:hover { background-color: rgba(25, 118, 210, 0.03); }
+
+/* Reuse existing toast/modal styles but slightly polished */
+.toast-container { position: fixed; bottom: 30px; right: 90px; }
+.toast { background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); border-radius: 10px; }
+
+/* Existing badge/button logic remains same but with CSS variables */
+.excel-download-btn { background: linear-gradient(135deg, #217346, #2e9e5c); }
+.group-toggle { background: #f0f0f0; border-radius: 20px; padding: 10px 20px; }
+
 </style>
