@@ -11,14 +11,21 @@
             v-for="(key, index) in columnOrder" 
             :key="key" 
             class="vis-label draggable-col"
-            :class="{ active: columnVisibility[key].visible }"
+            :class="{ 
+              active: columnVisibility[key].visible,
+              'is-dragging': draggingColIdx === index 
+            }"
             draggable="true"
+            :data-index="index"
             @dragstart="onColDragStart(index)"
             @dragover.prevent
             @drop="onColDrop(index)"
-            @click="columnVisibility[key].visible = !columnVisibility[key].visible"
+            @click="toggleColVisibility(key)"
+            @touchstart="onColTouchStart(index, $event)"
+            @touchmove="onColTouchMove($event)"
+            @touchend="onColTouchEnd($event)"
           >
-            {{ defaultCols[key].label }}
+            <span class="drag-handle">::</span> {{ defaultCols[key].label }}
           </div>
         </div>
       </div>
@@ -428,6 +435,7 @@ const columnVisibility = ref(Object.keys(defaultCols).reduce((acc, key) => {
 
 const columnOrder = ref(Object.keys(defaultCols));
 const draggingColIdx = ref(null);
+let touchMoved = false;
 
 const onColDragStart = (idx) => {
   draggingColIdx.value = idx;
@@ -439,6 +447,41 @@ const onColDrop = (idx) => {
   columnOrder.value.splice(idx, 0, item);
   draggingColIdx.value = null;
   localStorage.setItem('columnOrder', JSON.stringify(columnOrder.value));
+};
+
+const onColTouchStart = (idx, event) => {
+  draggingColIdx.value = idx;
+  touchMoved = false;
+};
+
+const onColTouchMove = (event) => {
+  if (draggingColIdx.value !== null) {
+    touchMoved = true;
+    if (event.cancelable) event.preventDefault();
+  }
+};
+
+const onColTouchEnd = (event) => {
+  if (draggingColIdx.value === null) return;
+  
+  if (touchMoved) {
+    const touch = event.changedTouches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const colEl = el?.closest('.draggable-col');
+    if (colEl) {
+      const targetIdx = parseInt(colEl.getAttribute('data-index'));
+      if (!isNaN(targetIdx) && targetIdx !== draggingColIdx.value) {
+        onColDrop(targetIdx);
+      }
+    }
+  }
+  
+  draggingColIdx.value = null;
+};
+
+const toggleColVisibility = (key) => {
+  if (touchMoved) return;
+  columnVisibility.value[key].visible = !columnVisibility.value[key].visible;
 };
 
 const visibleColsKeys = computed(() => {

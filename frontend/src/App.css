@@ -108,6 +108,22 @@ body {
   color: #fff;
   border-color: var(--primary);
 }
+.vis-label.is-dragging {
+  opacity: 0.5;
+  background: var(--primary-light);
+  border-style: dashed;
+  transform: scale(0.98);
+}
+.drag-handle {
+  color: var(--text-tertiary);
+  margin-right: 6px;
+  cursor: grab;
+  font-family: monospace;
+  font-weight: bold;
+}
+.vis-label.active .drag-handle {
+  color: rgba(255,255,255,0.7);
+}
 
 /* Modals */
 .modal-overlay {
