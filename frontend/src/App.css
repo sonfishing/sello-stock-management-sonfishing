@@ -363,15 +363,22 @@ body {
   color: var(--text-primary);
 }
 
-/* Enforce 40px Action Column */
+/* Enforce 10px Action Column */
 .product-table th:first-child,
 .product-table td.action-column {
-  width: 40px !important;
-  min-width: 40px !important;
-  max-width: 40px !important;
+  width: 10px !important;
+  min-width: 10px !important;
+  max-width: 10px !important;
   padding: 0 !important;
   overflow: visible !important;
   text-align: center;
+}
+
+.group-row td:first-child {
+  padding: 0 !important;
+  width: 10px !important;
+  min-width: 10px !important;
+  max-width: 10px !important;
 }
 
 /* Excel Cell Interaction */

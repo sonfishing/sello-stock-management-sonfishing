@@ -145,7 +145,7 @@
               <table class="product-table" @dragstart.prevent>
                 <thead>
                   <tr>
-                    <th style="width: 40px; min-width: 40px; z-index: 11;"></th>
+                    <th style="z-index: 11;"></th>
                     <th
                       v-for="key in visibleColsKeys"
                       :key="key"
@@ -165,7 +165,7 @@
                   <template v-for="row in renderRows" :key="row.isGroupRow ? row.node.id : row.product.id">
                     <!-- Group Row -->
                     <tr v-if="row.isGroupRow" class="group-row" @click="toggleGroup(row.node.prefix)" :style="{ backgroundColor: row.node.color }">
-                      <td style="width: 40px; background: inherit; border-right: 1px solid var(--border-color);"></td>
+                      <td class="action-column" style="background: inherit; border-right: 1px solid var(--border-color);"></td>
                       <td v-for="(key, cIdx) in visibleColsKeys" :key="key" :style="{ backgroundColor: row.node.color }">
                         <template v-if="cIdx === 0">
                           <span class="expand-icon">{{ expandedGroups.has(row.node.prefix) ? '▼' : '▶' }}</span>
@@ -188,7 +188,7 @@
                         :style="{ backgroundColor: row.color || '#fff' }"
                         @click="isBulkMode ? toggleBulkSelection(row.product.id) : null">
                       
-                      <td class="excel-cell action-column" style="width: 40px; border-right: 1px solid var(--border-color); position: relative;">
+                      <td class="excel-cell action-column" style="border-right: 1px solid var(--border-color); position: relative;">
                         <div class="cell-action-wrapper">
                           <button v-if="!isBulkMode" 
                                   class="add-row-btn" 
@@ -723,6 +723,7 @@ async function quickAddRow(source) {
     quantity: 0,
     safety_quantity: source.safety_quantity || 0,
     location: source.location || '',
+    supplier: source.supplier || '',
     print_name: baseName,
     is_deleted: false
   };
