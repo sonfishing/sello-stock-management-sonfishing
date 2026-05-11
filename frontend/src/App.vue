@@ -145,6 +145,7 @@
               <table class="product-table" @dragstart.prevent>
                 <thead>
                   <tr>
+                    <th style="width: 40px; min-width: 40px; z-index: 11;"></th>
                     <th
                       v-for="key in visibleColsKeys"
                       :key="key"
@@ -164,6 +165,7 @@
                   <template v-for="row in renderRows" :key="row.isGroupRow ? row.node.id : row.product.id">
                     <!-- Group Row -->
                     <tr v-if="row.isGroupRow" class="group-row" @click="toggleGroup(row.node.prefix)" :style="{ backgroundColor: row.node.color }">
+                      <td style="width: 40px; background: inherit; border-right: 1px solid var(--border-color);"></td>
                       <td v-for="(key, cIdx) in visibleColsKeys" :key="key" :style="{ backgroundColor: row.node.color }">
                         <template v-if="cIdx === 0">
                           <span class="expand-icon">{{ expandedGroups.has(row.node.prefix) ? '▼' : '▶' }}</span>
@@ -186,14 +188,8 @@
                         :style="{ backgroundColor: row.color || '#fff' }"
                         @click="isBulkMode ? toggleBulkSelection(row.product.id) : null">
                       
-                      <td v-for="(key, cIdx) in visibleColsKeys" :key="key"
-                          @mousedown.stop="onMouseDown(row.rIdx, cIdx, $event)"
-                          @mouseenter="onMouseEnter(row.rIdx, cIdx)"
-                          @dblclick="onDoubleClick(row.rIdx, cIdx)"
-                          :class="{ 'cell-selected': isSelected(row.rIdx, cIdx) }"
-                          class="excel-cell">
-                        
-                        <div v-if="cIdx === 0 && !isEditing(row.rIdx, cIdx)" class="cell-action-wrapper">
+                      <td class="excel-cell action-column" style="width: 40px; border-right: 1px solid var(--border-color); position: relative;">
+                        <div class="cell-action-wrapper">
                           <button v-if="!isBulkMode" 
                                   class="add-row-btn" 
                                   :class="{ 'remove-btn': row.product.is_new_session }"
@@ -202,7 +198,15 @@
                           </button>
                           <span v-if="row.product.is_new_session" class="new-badge">NEW</span>
                         </div>
+                      </td>
 
+                      <td v-for="(key, cIdx) in visibleColsKeys" :key="key"
+                          @mousedown.stop="onMouseDown(row.rIdx, cIdx, $event)"
+                          @mouseenter="onMouseEnter(row.rIdx, cIdx)"
+                          @dblclick="onDoubleClick(row.rIdx, cIdx)"
+                          :class="{ 'cell-selected': isSelected(row.rIdx, cIdx) }"
+                          class="excel-cell">
+                        
                         <template v-if="isEditing(row.rIdx, cIdx)">
                           <select v-if="key === 'is_hidden'"
                              class="full-input edit-active" 
