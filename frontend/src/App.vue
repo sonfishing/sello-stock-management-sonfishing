@@ -107,7 +107,7 @@
           <span class="btn-label">그룹 보기</span>
         </label>
       </div>
-      <h1 class="title">STOCK MASTER</h1>
+      <div></div>
       <div class="right-actions">
         <span v-if="modifiedIds.size > 0" class="status-badge modified">수정된 항목: {{ modifiedIds.size }}</span>
         <button class="menu-btn sidebar-toggle-btn" @click="showSidebar = !showSidebar">
