@@ -181,6 +181,8 @@
                           :class="{ 'cell-selected': isSelected(row.rIdx, cIdx) }"
                           class="excel-cell">
                         
+                        <button v-if="cIdx === 0 && !isEditing(row.rIdx, cIdx)" class="add-row-btn" @click.stop="quickAddRow(row.product)">+</button>
+
                         <template v-if="isEditing(row.rIdx, cIdx)">
                           <select v-if="key === 'is_hidden'"
                              class="full-input edit-active" 
@@ -654,6 +656,44 @@ async function doDownloadExcel() {
   a.click();
   URL.revokeObjectURL(url);
   addToast(`다운로드 완료 (${products.length}개)`);
+}
+
+async function quickAddRow(source) {
+  // Extract base name (remove everything after ':')
+  let baseName = (source.manage_name || '').split(':')[0].trim();
+  
+  const newProduct = {
+    manage_code: source.manage_code || '',
+    manage_name: baseName,
+    purchase_price: source.purchase_price || 0,
+    consumer_price: source.consumer_price || 0,
+    quantity: 0,
+    safety_quantity: source.safety_quantity || 0,
+    location: source.location || '',
+    print_name: baseName, // Optional: copy to print name as well
+    is_deleted: false
+  };
+
+  addToast('새 상품 등록 중...');
+
+  const { data, error } = await supabase.from('products').insert([newProduct]).select();
+  if (error) {
+    addToast('추가 실패: ' + error.message);
+    return;
+  }
+  
+  const saved = data[0];
+  const tab = activeTab.value;
+  if (tab && tabProducts.value[tab]) {
+    // Insert after the source product in the local array
+    const idx = tabProducts.value[tab].findIndex(p => p.id === source.id);
+    if (idx !== -1) {
+      tabProducts.value[tab].splice(idx + 1, 0, saved);
+    } else {
+      tabProducts.value[tab].push(saved);
+    }
+  }
+  addToast('새 상품이 추가되었습니다.');
 }
 
 onMounted(() => {
