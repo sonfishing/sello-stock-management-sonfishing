@@ -367,7 +367,6 @@ const showDownloadModal = ref(false);
 const showSidebar = ref(true);
 const isBulkMode = ref(false);
 const selectedBulkIds = ref(new Set());
-const showSidebar = ref(true);
 
 function addToast(message) {
   const id = Date.now() + Math.random();
