@@ -106,6 +106,12 @@
           <input type="checkbox" v-model="isGroupView" />
           <span class="btn-label">그룹 보기</span>
         </label>
+        <button class="menu-btn bulk-btn" :class="{ active: isBulkMode }" @click="toggleBulkMode">
+          <span class="icon">📋</span><span class="btn-label"> 대량작업</span>
+        </button>
+        <button v-if="isBulkMode && selectedBulkIds.size > 0" class="menu-btn bulk-delete-btn" @click="deleteSelectedRows">
+          <span class="icon">🗑️</span><span class="btn-label"> {{ selectedBulkIds.size }}개 삭제</span>
+        </button>
       </div>
       <div></div>
       <div class="right-actions">
@@ -172,7 +178,13 @@
                     </tr>
 
                     <!-- Items / Flat Rows -->
-                    <tr v-else class="item-row" :class="{ 'single-item-row': !row.idxInGroup && row.idxInGroup !== 0 }" :style="{ backgroundColor: row.color || '#fff' }">
+                    <tr v-else class="item-row" 
+                        :class="{ 
+                          'single-item-row': !row.idxInGroup && row.idxInGroup !== 0,
+                          'bulk-selected': selectedBulkIds.has(row.product.id)
+                        }" 
+                        :style="{ backgroundColor: row.color || '#fff' }"
+                        @click="isBulkMode ? toggleBulkSelection(row.product.id) : null">
                       
                       <td v-for="(key, cIdx) in visibleColsKeys" :key="key"
                           @mousedown.stop="onMouseDown(row.rIdx, cIdx, $event)"
@@ -181,7 +193,15 @@
                           :class="{ 'cell-selected': isSelected(row.rIdx, cIdx) }"
                           class="excel-cell">
                         
-                        <button v-if="cIdx === 0 && !isEditing(row.rIdx, cIdx)" class="add-row-btn" @click.stop="quickAddRow(row.product)">+</button>
+                        <div v-if="cIdx === 0 && !isEditing(row.rIdx, cIdx)" class="cell-action-wrapper">
+                          <button v-if="!isBulkMode" 
+                                  class="add-row-btn" 
+                                  :class="{ 'remove-btn': row.product.is_new_session }"
+                                  @click.stop="row.product.is_new_session ? deleteRow(row.product.id) : quickAddRow(row.product)">
+                            {{ row.product.is_new_session ? '-' : '+' }}
+                          </button>
+                          <span v-if="row.product.is_new_session" class="new-badge">NEW</span>
+                        </div>
 
                         <template v-if="isEditing(row.rIdx, cIdx)">
                           <select v-if="key === 'is_hidden'"
@@ -344,6 +364,9 @@ const showOffCanvas = ref(false);
 const showAddCanvas = ref(false);
 const showUploadModal = ref(false);
 const showDownloadModal = ref(false);
+const showSidebar = ref(true);
+const isBulkMode = ref(false);
+const selectedBulkIds = ref(new Set());
 const showSidebar = ref(true);
 
 function addToast(message) {
@@ -659,18 +682,23 @@ async function doDownloadExcel() {
 }
 
 async function quickAddRow(source) {
-  // Extract base name (remove everything after ':')
+  // Extract base code (remove everything after '-')
+  let baseCode = (source.manage_code || '').split('-')[0].trim();
+  // Extract base name (remove everything after ':', but keep ':')
   let baseName = (source.manage_name || '').split(':')[0].trim();
+  if ((source.manage_name || '').includes(':')) {
+    baseName += ':';
+  }
   
   const newProduct = {
-    manage_code: source.manage_code || '',
+    manage_code: baseCode,
     manage_name: baseName,
     purchase_price: source.purchase_price || 0,
     consumer_price: source.consumer_price || 0,
     quantity: 0,
     safety_quantity: source.safety_quantity || 0,
     location: source.location || '',
-    print_name: baseName, // Optional: copy to print name as well
+    print_name: baseName,
     is_deleted: false
   };
 
@@ -682,10 +710,9 @@ async function quickAddRow(source) {
     return;
   }
   
-  const saved = data[0];
+  const saved = { ...data[0], is_new_session: true };
   const tab = activeTab.value;
   if (tab && tabProducts.value[tab]) {
-    // Insert after the source product in the local array
     const idx = tabProducts.value[tab].findIndex(p => p.id === source.id);
     if (idx !== -1) {
       tabProducts.value[tab].splice(idx + 1, 0, saved);
@@ -694,6 +721,70 @@ async function quickAddRow(source) {
     }
   }
   addToast('새 상품이 추가되었습니다.');
+}
+
+async function deleteRow(id) {
+  if (!confirm('정말 삭제하시겠습니까?')) return;
+  
+  const { error } = await supabase
+    .from('products')
+    .update({ is_deleted: true })
+    .eq('id', id);
+    
+  if (error) {
+    addToast('삭제 실패: ' + error.message);
+  } else {
+    // Remove locally
+    const tab = activeTab.value;
+    if (tab && tabProducts.value[tab]) {
+      tabProducts.value[tab] = tabProducts.value[tab].filter(p => p.id !== id);
+    }
+    selectedBulkIds.value.delete(id);
+    addToast('삭제되었습니다.');
+  }
+}
+
+async function deleteSelectedRows() {
+  const ids = [...selectedBulkIds.value];
+  if (ids.length === 0) {
+    addToast('선택된 상품이 없습니다.');
+    return;
+  }
+  
+  if (!confirm(`${ids.length}개의 상품을 삭제하시겠습니까?`)) return;
+  
+  addToast(`${ids.length}개 삭제 중...`);
+  const { error } = await supabase
+    .from('products')
+    .update({ is_deleted: true })
+    .in('id', ids);
+    
+  if (error) {
+    addToast('삭제 실패: ' + error.message);
+  } else {
+    const tab = activeTab.value;
+    if (tab && tabProducts.value[tab]) {
+      tabProducts.value[tab] = tabProducts.value[tab].filter(p => !selectedBulkIds.value.has(p.id));
+    }
+    selectedBulkIds.value.clear();
+    isBulkMode.value = false;
+    addToast('선택한 상품들이 삭제되었습니다.');
+  }
+}
+
+function toggleBulkMode() {
+  isBulkMode.value = !isBulkMode.value;
+  if (!isBulkMode.value) {
+    selectedBulkIds.value.clear();
+  }
+}
+
+function toggleBulkSelection(id) {
+  if (selectedBulkIds.value.has(id)) {
+    selectedBulkIds.value.delete(id);
+  } else {
+    selectedBulkIds.value.add(id);
+  }
 }
 
 onMounted(() => {
