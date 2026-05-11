@@ -192,11 +192,11 @@
                         <div class="cell-action-wrapper">
                           <button v-if="!isBulkMode" 
                                   class="add-row-btn" 
-                                  :class="{ 'remove-btn': row.product.is_new_session }"
-                                  @click.stop="row.product.is_new_session ? deleteRow(row.product.id) : quickAddRow(row.product)">
-                            {{ row.product.is_new_session ? '-' : '+' }}
+                                  :class="{ 'remove-btn': newEntriesIds.has(row.product.id) }"
+                                  @click.stop="newEntriesIds.has(row.product.id) ? deleteRow(row.product.id) : quickAddRow(row.product)">
+                            {{ newEntriesIds.has(row.product.id) ? '-' : '+' }}
                           </button>
-                          <span v-if="row.product.is_new_session" class="new-badge">NEW</span>
+                          <span v-if="newEntriesIds.has(row.product.id)" class="new-badge">NEW</span>
                         </div>
                       </td>
 
@@ -583,6 +583,27 @@ function unmarkModified(id) {
   localStorage.setItem(MODIFIED_KEY, JSON.stringify([...modifiedIds.value]));
 }
 
+// ─── New Session Entries Tracking (localStorage) ─────────────────────────────
+const NEW_ENTRIES_KEY = 'newProductIds';
+const newEntriesIds = ref(new Set(
+  JSON.parse(localStorage.getItem(NEW_ENTRIES_KEY) || '[]')
+));
+
+function markAsNew(id) {
+  newEntriesIds.value.add(id);
+  localStorage.setItem(NEW_ENTRIES_KEY, JSON.stringify([...newEntriesIds.value]));
+}
+
+function unmarkNew(id) {
+  newEntriesIds.value.delete(id);
+  localStorage.setItem(NEW_ENTRIES_KEY, JSON.stringify([...newEntriesIds.value]));
+}
+
+function clearNewEntries() {
+  newEntriesIds.value.clear();
+  localStorage.removeItem(NEW_ENTRIES_KEY);
+}
+
 // ─── Excel Download Modal ─────────────────────────────────────────────────────
 const downloadMode = ref('all'); // 'all' | 'modified'
 const downloadCols = ref(
@@ -597,9 +618,10 @@ function openDownloadModal() {
 }
 
 function confirmClearModified() {
-  if (confirm(`수정 내역 ${modifiedIds.value.size}개를 초기화하시겠습니까?`)) {
+  if (confirm(`수정 내역 및 신규 상품 표시를 초기화하시겠습니까?`)) {
     clearModified();
-    addToast('수정 내역이 초기화되었습니다.');
+    clearNewEntries();
+    addToast('초기화되었습니다.');
     downloadMode.value = 'all';
   }
 }
@@ -713,7 +735,9 @@ async function quickAddRow(source) {
     return;
   }
   
-  const saved = { ...data[0], is_new_session: true };
+  const saved = data[0];
+  markAsNew(saved.id);
+  
   const tab = activeTab.value;
   if (tab && tabProducts.value[tab]) {
     const idx = tabProducts.value[tab].findIndex(p => p.id === source.id);
@@ -743,6 +767,7 @@ async function deleteRow(id) {
       tabProducts.value[tab] = tabProducts.value[tab].filter(p => p.id !== id);
     }
     selectedBulkIds.value.delete(id);
+    unmarkNew(id);
     addToast('삭제되었습니다.');
   }
 }

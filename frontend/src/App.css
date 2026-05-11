@@ -363,6 +363,17 @@ body {
   color: var(--text-primary);
 }
 
+/* Enforce 40px Action Column */
+.product-table th:first-child,
+.product-table td.action-column {
+  width: 40px !important;
+  min-width: 40px !important;
+  max-width: 40px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  text-align: center;
+}
+
 /* Excel Cell Interaction */
 .excel-cell {
   position: relative;
