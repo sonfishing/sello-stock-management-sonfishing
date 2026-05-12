@@ -399,8 +399,8 @@ const undoLastAction = async () => {
   const updatedProducts = new Map();
 
   for (const change of lastChanges) {
-    const { id, field, oldValue } = change;
-    const updates = { [field]: oldValue, updated_at: new Date().toISOString() };
+    const { id, field, oldValue, oldUpdatedAt } = change;
+    const updates = { [field]: oldValue, updated_at: oldUpdatedAt || new Date().toISOString() };
     promises.push(supabase.from('products').update(updates).eq('id', id));
     
     // Track updates for local cache sync
@@ -1096,7 +1096,12 @@ function handleGlobalKeydown(e) {
             }
             
             if (product[key] !== emptyVal) {
-               batchChanges.push({ id: product.id, field: key, oldValue: product[key] });
+               batchChanges.push({ 
+                 id: product.id, 
+                 field: key, 
+                 oldValue: product[key],
+                 oldUpdatedAt: product.updated_at 
+               });
                product[key] = emptyVal;
                updates[key] = emptyVal;
                changed = true;
@@ -1149,6 +1154,7 @@ function handleGlobalKeydown(e) {
 
 // Global paste handler
 async function handleGlobalPaste(e) {
+   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
    if (editingCell.value) return; // Native paste inside input
    
    e.preventDefault();
@@ -1189,7 +1195,12 @@ async function handleGlobalPaste(e) {
          }
          
          if (product[key] !== val) {
-           batchChanges.push({ id: product.id, field: key, oldValue: product[key] });
+           batchChanges.push({ 
+             id: product.id, 
+             field: key, 
+             oldValue: product[key],
+             oldUpdatedAt: product.updated_at 
+           });
            product[key] = val; // Optimistic logic
            updates[key] = val;
            changed = true;
@@ -1225,10 +1236,14 @@ function closeAndSave(product, key, newVal) {
 async function updateField(id, field, value) {
   // Get old value for undo
   let oldValue = null;
+  let oldUpdatedAt = null;
   const active = activeTab.value;
   if (active && tabProducts.value[active]) {
     const p = tabProducts.value[active].find(p => p.id === id);
-    if (p) oldValue = p[field];
+    if (p) {
+      oldValue = p[field];
+      oldUpdatedAt = p.updated_at;
+    }
   }
 
   const updates = {
@@ -1246,7 +1261,7 @@ async function updateField(id, field, value) {
     alert("수정 실패: " + error.message);
   } else {
     markModified(id);
-    pushToUndo([{ id, field, oldValue }]);
+    pushToUndo([{ id, field, oldValue, oldUpdatedAt }]);
     if (active && tabProducts.value[active]) {
       const idx = tabProducts.value[active].findIndex(p => p.id === id);
       if (idx !== -1) {
