@@ -4,6 +4,12 @@
     <div class="menu-inner">
       <button class="close-menu-btn-top" @click="showOffCanvas = false">&times;</button>
 
+      <div class="menu-section upload-section">
+        <button class="menu-action-btn upload-btn-full" @click="showUploadModal = true; showOffCanvas = false;">
+          <span class="icon">📤</span> 셀로 상품 엑셀 파일 업로드
+        </button>
+      </div>
+
       <div class="menu-section columns-section" v-if="currentView === 'list'">
         <h3>📊 컬럼 표시 및 순서 (드래그)</h3>
         <div class="column-visibility-grid">
@@ -37,66 +43,17 @@
     </div>
   </div>
 
-  <!-- Add Product Off-canvas Menu (Batch Sheet) -->
-  <div class="off-canvas-menu add-canvas" :class="{ 'active': showAddCanvas }">
-    <div class="menu-inner" style="max-width: 1400px;">
-      <div class="menu-header">
-        <h3>✨ 새 상품 일괄 등록</h3>
-        <p class="subtitle">시트 형식으로 한 번에 여러 상품을 입력할 수 있습니다 (최대 10개)</p>
-      </div>
-      
-      <div class="add-table-wrapper">
-        <table class="add-entry-table">
-          <thead>
-            <tr>
-              <th style="width: 40px;">No</th>
-              <th style="width: 150px;">관리코드</th>
-              <th style="width: 300px;">상품명 (필수)</th>
-              <th style="width: 100px;">재고</th>
-              <th style="width: 100px;">안전재고</th>
-              <th style="width: 120px;">사입단가</th>
-              <th style="width: 120px;">소비자가</th>
-              <th style="width: 150px;">위치</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(p, idx) in newProducts" :key="idx">
-              <td style="text-align: center; color: #999;">{{ idx + 1 }}</td>
-              <td><input v-model="p.manage_code" placeholder="A-001" /></td>
-              <td><input v-model="p.manage_name" placeholder="상품명을 입력하세요" /></td>
-              <td><input v-model.number="p.quantity" type="number" /></td>
-              <td><input v-model.number="p.safety_quantity" type="number" /></td>
-              <td><input v-model.number="p.purchase_price" type="number" /></td>
-              <td><input v-model.number="p.consumer_price" type="number" /></td>
-              <td><input v-model="p.location" placeholder="창고 위치" /></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+  <!-- Add Product Off-canvas Menu (REMOVED) -->
 
-      <div class="menu-footer add-footer">
-        <span class="add-info">💡 상품명이 입력된 행만 등록됩니다.</span>
-        <div class="btns">
-          <button class="cancel-btn" @click="showAddCanvas = false">취소</button>
-          <button class="submit-btn" @click="doBatchAdd">🚀 상품 등록하기</button>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <div class="main-layout" :class="{ 'dimmed': showOffCanvas || showAddCanvas || showUploadModal || showDownloadModal }">
+  <div class="main-layout" :class="{ 'dimmed': showOffCanvas || showUploadModal || showDownloadModal }">
     <!-- Top Bar -->
     <header class="top-bar">
       <div class="left-actions">
         <button class="menu-btn" @click="showOffCanvas = !showOffCanvas">
           <span class="icon">⚙️</span><span class="btn-label"> 설정</span>
         </button>
-        <button class="add-btn-top" @click="showAddCanvas = true">
-          <span class="icon">➕</span><span class="btn-label"> 상품 등록</span>
-        </button>
-        <button class="upload-btn-top" @click="showUploadModal = true">
-          <span class="icon">📤</span><span class="btn-label"> 엑셀 업로드</span>
+        <button class="menu-btn" @click="addToast('기능 준비 중입니다.')">
+          <span class="icon">📦</span><span class="btn-label"> 셀로재고업로드</span>
         </button>
         <button class="excel-download-btn" @click="openDownloadModal">
           <span class="icon">📥</span><span class="btn-label"> 다운로드</span>
@@ -288,7 +245,9 @@
         <h2 class="modal-title">📤 엑셀 파일 업로드</h2>
         <button @click="showUploadModal = false" style="background:none; border:none; font-size: 24px; cursor:pointer;">&times;</button>
       </div>
-      <ProductUpload @onUploadSuccess="showUploadModal = false" />
+      <div class="upload-section">
+        <ProductUpload @onUploadSuccess="showUploadModal = false" />
+      </div>
     </div>
   </div>
 
@@ -351,21 +310,10 @@ import { supabase } from "./supabaseClient";
 import ProductUpload from "./components/ProductUpload.vue";
 import "./App.css";
 
-const newProducts = ref(Array.from({ length: 10 }, () => ({
-  manage_code: "",
-  manage_name: "",
-  quantity: 0,
-  safety_quantity: 0,
-  purchase_price: 0,
-  consumer_price: 0,
-  location: "" 
-})));
-
 const currentView = ref("list");
 const isGroupView = ref(true);
 const toastMessages = ref([]);
 const showOffCanvas = ref(false);
-const showAddCanvas = ref(false);
 const showUploadModal = ref(false);
 const showDownloadModal = ref(false);
 const showSidebar = ref(true);
@@ -1295,57 +1243,6 @@ function formatDate(dateStr) {
     });
   } catch {
     return '-';
-  }
-}
-
-async function doBatchAdd() {
-  const productsToAdd = newProducts.value.filter(p => p.manage_name.trim() !== "");
-  if (productsToAdd.length === 0) {
-    alert("등록할 상품명을 입력해주세요.");
-    return;
-  }
-  
-  let successCount = 0;
-  for (const p of productsToAdd) {
-    const now = new Date().toISOString();
-    const { data: insertedData, error } = await supabase.from("products").insert([{
-      manage_code: p.manage_code || "",
-      manage_name: p.manage_name,
-      quantity: p.quantity || 0,
-      safety_quantity: p.safety_quantity || 0,
-      purchase_price: p.purchase_price || 0,
-      consumer_price: p.consumer_price || 0,
-      location: p.location || "",
-      registered_at: now,
-      updated_at: now
-    }]).select();
-
-    if (!error) {
-      successCount++;
-      const insertedProduct = insertedData[0];
-      const code = insertedProduct.manage_code;
-      if (code) {
-        const firstChar = code[0].toUpperCase();
-        const tab = /[A-Z]/.test(firstChar) ? firstChar : '#';
-        if (tabProducts.value[tab]) {
-          tabProducts.value[tab].push(insertedProduct);
-          tabProducts.value[tab].sort((a, b) => (a.manage_code > b.manage_code ? 1 : -1));
-        }
-      }
-    } else {
-      console.error("Add error:", error);
-    }
-  }
-
-  if (successCount > 0) {
-    addToast(`${successCount}개의 상품이 등록되었습니다.`);
-    // Reset sheet
-    newProducts.value = Array.from({ length: 10 }, () => ({
-      manage_code: "", manage_name: "", quantity: 0, safety_quantity: 0, 
-      purchase_price: 0, consumer_price: 0, location: "" 
-    }));
-    showAddCanvas.value = false;
-    if (activeTab.value) await loadTab(activeTab.value, true);
   }
 }
 
