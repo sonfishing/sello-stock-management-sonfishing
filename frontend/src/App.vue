@@ -45,14 +45,14 @@
 
   <!-- Add Product Off-canvas Menu (REMOVED) -->
 
-  <div class="main-layout" :class="{ 'dimmed': showOffCanvas || showUploadModal || showDownloadModal }">
+  <div class="main-layout" :class="{ 'dimmed': showOffCanvas || showUploadModal || showSelloUploadModal || showDownloadModal }">
     <!-- Top Bar -->
     <header class="top-bar">
       <div class="left-actions">
         <button class="menu-btn" @click="showOffCanvas = !showOffCanvas">
           <span class="icon">⚙️</span><span class="btn-label"> 설정</span>
         </button>
-        <button class="menu-btn" @click="addToast('기능 준비 중입니다.')">
+        <button class="menu-btn" @click="showSelloUploadModal = true">
           <span class="icon">📦</span><span class="btn-label"> 셀로재고업로드</span>
         </button>
         <button class="excel-download-btn" @click="openDownloadModal">
@@ -242,12 +242,23 @@
   <div v-if="showUploadModal" class="modal-overlay" @click.self="showUploadModal = false">
     <div class="modal-box" style="max-width: 1000px; max-height: 90vh; overflow: auto;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2 class="modal-title">📤 엑셀 파일 업로드</h2>
+        <h2 class="modal-title">📤 엑셀 파일 업로드 (상품 등록/수정)</h2>
         <button @click="showUploadModal = false" style="background:none; border:none; font-size: 24px; cursor:pointer;">&times;</button>
       </div>
       <div class="upload-section">
         <ProductUpload @onUploadSuccess="showUploadModal = false" />
       </div>
+    </div>
+  </div>
+
+  <!-- Sello Stock Upload Modal -->
+  <div v-if="showSelloUploadModal" class="modal-overlay" @click.self="showSelloUploadModal = false">
+    <div class="modal-box" style="max-width: 1000px; max-height: 90vh; overflow: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 class="modal-title">📦 셀로 재고 수정 (엑셀 업로드)</h2>
+        <button @click="showSelloUploadModal = false" style="background:none; border:none; font-size: 24px; cursor:pointer;">&times;</button>
+      </div>
+      <SelloStockUpload @onUploadSuccess="showSelloUploadModal = false; loadTab(activeTab, true);" />
     </div>
   </div>
 
@@ -308,6 +319,7 @@
 import { ref, computed, watch, onMounted, nextTick } from "vue";
 import { supabase } from "./supabaseClient";
 import ProductUpload from "./components/ProductUpload.vue";
+import SelloStockUpload from "./components/SelloStockUpload.vue";
 import "./App.css";
 
 const currentView = ref("list");
@@ -315,6 +327,7 @@ const isGroupView = ref(true);
 const toastMessages = ref([]);
 const showOffCanvas = ref(false);
 const showUploadModal = ref(false);
+const showSelloUploadModal = ref(false);
 const showDownloadModal = ref(false);
 const showSidebar = ref(true);
 const isBulkMode = ref(false);
