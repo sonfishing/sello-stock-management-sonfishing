@@ -95,6 +95,7 @@ import { supabase } from "../supabaseClient";
 const fileInput = ref(null);
 const previewData = ref([]);
 const isUploading = ref(false);
+const emit = defineEmits(['onUploadSuccess']);
 
 function handleFileSelect(event) {
   const file = event.target.files[0];
@@ -257,6 +258,7 @@ async function uploadToSupabase() {
     if (errors.length > 0) throw errors[0];
 
     alert(`성공적으로 처리되었습니다! (총 ${validRows.length}건)`);
+    emit('onUploadSuccess');
     previewData.value = [];
   } catch (error) {
     console.error("Upload error:", error);

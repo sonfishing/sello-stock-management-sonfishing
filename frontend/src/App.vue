@@ -62,7 +62,9 @@
           <span class="icon">📦</span><span class="btn-label"> 셀로재고업로드</span>
         </button>
         <button class="menu-btn sello-send-btn" @click="exportSelloStock">
-          <span class="icon">📤</span><span class="btn-label"> 셀로재고보내기</span>
+          <span class="icon">📤</span>
+          <span class="btn-label"> 셀로재고보내기</span>
+          <span v-if="pendingSelloCount > 0" class="modified-badge sello-badge">{{ pendingSelloCount }}</span>
         </button>
         <label class="group-toggle">
           <input type="checkbox" v-model="isGroupView" />
@@ -127,11 +129,10 @@
                   <template v-for="row in renderRows" :key="row.isGroupRow ? row.node.id : row.product.id">
                     <!-- Group Row -->
                     <tr v-if="row.isGroupRow" class="group-row" @click="toggleGroup(row.node.prefix)" :style="{ backgroundColor: row.node.color }">
-                      <td class="action-column" style="background: inherit; border-right: 1px solid var(--border-color);"></td>
+                      <td class="action-column" style="background: inherit; border-right: 1px solid var(--border-color);">
+                        <span class="expand-icon">{{ expandedGroups.has(row.node.prefix) ? '▼' : '▶' }}</span>
+                      </td>
                       <td v-for="(key, cIdx) in visibleColsKeys" :key="key" :style="{ backgroundColor: row.node.color }">
-                        <template v-if="cIdx === 0">
-                          <span class="expand-icon">{{ expandedGroups.has(row.node.prefix) ? '▼' : '▶' }}</span>
-                        </template>
                         <template v-if="key === 'manage_code'">
                           <strong>{{ row.node.prefix }}</strong>
                         </template>
@@ -242,6 +243,16 @@
       </aside>
     </div>
   </div>
+  <!-- Sello Stock Upload Modal -->
+  <div v-if="showSelloUploadModal" class="modal-overlay" @click.self="showSelloUploadModal = false">
+    <div class="modal-box" style="max-width: 1000px; max-height: 90vh; overflow: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 class="modal-title">📦 셀로 재고 수정 (엑셀 업로드)</h2>
+        <button @click="showSelloUploadModal = false" style="background:none; border:none; font-size: 24px; cursor:pointer;">&times;</button>
+      </div>
+      <SelloStockUpload @onUploadSuccess="showSelloUploadModal = false; loadTab(activeTab, true); updatePendingSelloCount();" />
+    </div>
+  </div>
 
   <!-- Excel Upload Modal -->
   <div v-if="showUploadModal" class="modal-overlay" @click.self="showUploadModal = false">
@@ -251,19 +262,8 @@
         <button @click="showUploadModal = false" style="background:none; border:none; font-size: 24px; cursor:pointer;">&times;</button>
       </div>
       <div class="upload-section">
-        <ProductUpload @onUploadSuccess="showUploadModal = false" />
+        <ProductUpload @onUploadSuccess="showUploadModal = false; updatePendingSelloCount();" />
       </div>
-    </div>
-  </div>
-
-  <!-- Sello Stock Upload Modal -->
-  <div v-if="showSelloUploadModal" class="modal-overlay" @click.self="showSelloUploadModal = false">
-    <div class="modal-box" style="max-width: 1000px; max-height: 90vh; overflow: auto;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2 class="modal-title">📦 셀로 재고 수정 (엑셀 업로드)</h2>
-        <button @click="showSelloUploadModal = false" style="background:none; border:none; font-size: 24px; cursor:pointer;">&times;</button>
-      </div>
-      <SelloStockUpload @onUploadSuccess="showSelloUploadModal = false; loadTab(activeTab, true);" />
     </div>
   </div>
 
@@ -337,6 +337,18 @@ const showDownloadModal = ref(false);
 const showSidebar = ref(true);
 const isBulkMode = ref(false);
 const selectedBulkIds = ref(new Set());
+const pendingSelloCount = ref(0);
+
+async function updatePendingSelloCount() {
+  const { count, error } = await supabase
+    .from('sello_upload_queue')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'PENDING');
+  
+  if (!error) {
+    pendingSelloCount.value = count || 0;
+  }
+}
 
 function addToast(message) {
   const id = Date.now() + Math.random();
@@ -765,6 +777,7 @@ async function exportSelloStock() {
       addToast('상태 업데이트 실패: ' + updateError.message);
     } else {
       addToast('상태 업데이트 완료');
+      updatePendingSelloCount();
     }
   }
 }
@@ -919,6 +932,8 @@ onMounted(() => {
   window.addEventListener('mouseup', () => { isDragging.value = false; });
   document.addEventListener('keydown', handleGlobalKeydown);
   document.addEventListener('paste', handleGlobalPaste);
+  
+  updatePendingSelloCount();
 });
 
 watch(columnVisibility, (newVal) => {
@@ -1184,6 +1199,7 @@ function handleGlobalKeydown(e) {
          addToast(`${updateCount}개 데이터 삭제 반영 중...`);
          Promise.all(promises).then(() => {
             addToast('삭제 반영 완료');
+            updatePendingSelloCount();
          });
       }
       return;
@@ -1283,6 +1299,7 @@ async function handleGlobalPaste(e) {
      addToast(`${updateCount}개 데이터 반영 중...`);
      await Promise.all(promises);
      addToast('붙여넣기 반영 완료');
+     updatePendingSelloCount();
    }
 }
 
@@ -1333,6 +1350,11 @@ async function updateField(id, field, value) {
     }
     const fieldLabel = defaultCols[field]?.label || field;
     addToast(`"${fieldLabel}" 수정됨`);
+    
+    // 재고 수량이 변경된 경우 셀로 대기열 카운트 업데이트
+    if (field === 'quantity') {
+      updatePendingSelloCount();
+    }
   }
 }
 

@@ -157,6 +157,13 @@ body {
   background: #45a049 !important;
 }
 
+.sello-badge {
+  background: white !important;
+  color: #4CAF50 !important;
+  font-weight: 800;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
 .column-visibility-grid {
   display: flex;
   flex-wrap: wrap;
@@ -498,6 +505,19 @@ body {
 .group-row { cursor: pointer; }
 .group-row:hover td {
   box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.expand-icon {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: center;
+}
+.group-row:hover .expand-icon {
+  color: var(--primary);
+  transform: scale(1.2);
 }
 
 .padding-cell { padding: 6px 10px; min-height: 20px; display: block; }
