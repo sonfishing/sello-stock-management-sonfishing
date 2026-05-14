@@ -90,7 +90,7 @@ body {
   margin-bottom: 24px;
 }
 .upload-btn-full {
-  width: 100%;
+  flex: 2;
   padding: 16px;
   background: var(--primary);
   color: white;
@@ -110,6 +110,51 @@ body {
   background: #1B64DA;
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(49, 130, 246, 0.3);
+}
+
+.button-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.download-btn-side {
+  flex: 1;
+  padding: 16px;
+  background: #E8F3FF;
+  color: var(--primary);
+  border: 2px solid var(--primary);
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+.download-btn-side:hover {
+  background: #D3E4FD;
+  transform: translateY(-2px);
+}
+
+.modified-badge-inline {
+  background: #FF4D4F;
+  color: white;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.sello-send-btn {
+  background: #4CAF50 !important;
+  color: white !important;
+}
+.sello-send-btn:hover {
+  background: #45a049 !important;
 }
 
 .column-visibility-grid {

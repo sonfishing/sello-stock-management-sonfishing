@@ -5,9 +5,15 @@
       <button class="close-menu-btn-top" @click="showOffCanvas = false">&times;</button>
 
       <div class="menu-section upload-section">
-        <button class="menu-action-btn upload-btn-full" @click="showUploadModal = true; showOffCanvas = false;">
-          <span class="icon">📤</span> 셀로 상품 엑셀 파일 업로드
-        </button>
+        <div class="button-row">
+          <button class="menu-action-btn upload-btn-full" @click="showUploadModal = true; showOffCanvas = false;">
+            <span class="icon">📤</span> 셀로 상품 엑셀 파일 업로드
+          </button>
+          <button class="menu-action-btn download-btn-side" @click="openDownloadModal(); showOffCanvas = false;">
+            <span class="icon">📥</span> 다운로드
+            <span v-if="modifiedIds.size > 0" class="modified-badge-inline">{{ modifiedIds.size }}</span>
+          </button>
+        </div>
       </div>
 
       <div class="menu-section columns-section" v-if="currentView === 'list'">
@@ -55,9 +61,8 @@
         <button class="menu-btn" @click="showSelloUploadModal = true">
           <span class="icon">📦</span><span class="btn-label"> 셀로재고업로드</span>
         </button>
-        <button class="excel-download-btn" @click="openDownloadModal">
-          <span class="icon">📥</span><span class="btn-label"> 다운로드</span>
-          <span v-if="modifiedIds.size > 0" class="modified-badge">{{ modifiedIds.size }}</span>
+        <button class="menu-btn sello-send-btn" @click="exportSelloStock">
+          <span class="icon">📤</span><span class="btn-label"> 셀로재고보내기</span>
         </button>
         <label class="group-toggle">
           <input type="checkbox" v-model="isGroupView" />
@@ -665,6 +670,103 @@ async function doDownloadExcel() {
   a.click();
   URL.revokeObjectURL(url);
   addToast(`다운로드 완료 (${products.length}개)`);
+}
+
+async function exportSelloStock() {
+  addToast('셀로 재고 데이터 조회 중...');
+  
+  // 1. Fetch PENDING items from sello_upload_queue
+  const { data: queueItems, error: queueError } = await supabase
+    .from('sello_upload_queue')
+    .select('*')
+    .eq('status', 'PENDING');
+
+  if (queueError) {
+    addToast('대기열 조회 실패: ' + queueError.message);
+    return;
+  }
+
+  if (!queueItems || queueItems.length === 0) {
+    addToast('보낼 재고 데이터가 없습니다.');
+    return;
+  }
+
+  // 2. Fetch product names
+  const serials = [...new Set(queueItems.map(item => item.serial_number))];
+  const { data: products, error: prodError } = await supabase
+    .from('products')
+    .select('serial_number, manage_name')
+    .in('serial_number', serials);
+
+  if (prodError) {
+    addToast('상품 정보 조회 실패: ' + prodError.message);
+    return;
+  }
+
+  // 3. Fetch latest reasons from stock_adjustment_log
+  const { data: logs, error: logError } = await supabase
+    .from('stock_adjustment_log')
+    .select('serial_number, reason, created_at')
+    .in('serial_number', serials)
+    .order('created_at', { ascending: false });
+
+  // Map reasons: serial -> latest reason
+  const reasonMap = {};
+  if (logs) {
+    logs.forEach(log => {
+      if (!reasonMap[log.serial_number]) {
+        reasonMap[log.serial_number] = log.reason;
+      }
+    });
+  }
+
+  const prodMap = {};
+  if (products) {
+    products.forEach(p => {
+      prodMap[p.serial_number] = p.manage_name;
+    });
+  }
+
+  // 4. Build CSV
+  const headers = ['일련번호', '관리상품명', '재고증감값', '사유'];
+  const rows = queueItems.map(item => {
+    const name = prodMap[item.serial_number] || '';
+    const reason = reasonMap[item.serial_number] || '';
+    return [
+      item.serial_number,
+      name,
+      item.delta_qty,
+      reason
+    ].map(v => `"${String(v !== null ? v : '').replace(/"/g, '""')}"`).join(',');
+  });
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+  
+  a.href = url;
+  a.download = `셀로재고보내기_${ts}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  addToast(`다운로드 완료 (${queueItems.length}개)`);
+  
+  if (confirm(`다운로드한 ${queueItems.length}개 항목을 '처리 완료'로 표시할까요?\n(대기열에서 제외됩니다)`)) {
+    const ids = queueItems.map(item => item.id);
+    const { error: updateError } = await supabase
+      .from('sello_upload_queue')
+      .update({ status: 'SUCCESS' })
+      .in('id', ids);
+    
+    if (updateError) {
+      addToast('상태 업데이트 실패: ' + updateError.message);
+    } else {
+      addToast('상태 업데이트 완료');
+    }
+  }
 }
 
 async function quickAddRow(source) {
