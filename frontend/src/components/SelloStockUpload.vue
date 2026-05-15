@@ -86,6 +86,7 @@ async function parseSelloExcel(file) {
     const qtyKey = findKey(['재고', 'quantity', 'qty', 'stock']);
 
     // 1. 필요한 데이터 추출 및 매핑
+    const seenSns = new Set();
     const rows = jsonData.map(row => {
       const snValue = snKey ? row[snKey] : (row['일련번호'] || row['serial_number']);
       const nameValue = nameKey ? row[nameKey] : (row['관리상품명'] || row['manage_name']);
@@ -95,12 +96,19 @@ async function parseSelloExcel(file) {
       const cleanSn = snValue ? String(snValue).replace(/["']/g, '').trim() : null;
       const cleanName = nameValue ? String(nameValue).replace(/["']/g, '').trim() : '';
 
+      let error = null;
+      if (cleanSn && seenSns.has(cleanSn)) {
+        error = "중복된 일련번호 (엑셀)";
+      } else if (cleanSn) {
+        seenSns.add(cleanSn);
+      }
+
       return {
         serial_number: cleanSn,
         manage_name: cleanName,
         new_qty: qtyValue !== undefined ? Number(qtyValue) : 0,
         current_qty: null,
-        error: null
+        error: error
       };
     }).filter(row => row.serial_number);
 
@@ -144,8 +152,17 @@ async function parseSelloExcel(file) {
 }
 
 async function uploadToSupabase() {
-  const validRows = previewData.value.filter(r => !r.error);
-  if (validRows.length === 0) return;
+  // 에러가 없고, DB에 존재하며(current_qty !== null), 재고 수량이 변동된 경우만 필터링
+  const validRows = previewData.value.filter(r => 
+    !r.error && 
+    r.current_qty !== null && 
+    Number(r.current_qty) !== Number(r.new_qty)
+  );
+  
+  if (validRows.length === 0) {
+    alert("변경할 재고 정보가 없거나 이미 최신 상태입니다.");
+    return;
+  }
 
   isUploading.value = true;
   try {
@@ -163,7 +180,16 @@ async function uploadToSupabase() {
         .from('products')
         .upsert(chunk, { onConflict: 'serial_number' });
       
-      if (error) throw error;
+      if (error) {
+        // 해당 청크의 행들에 에러 메시지 표시
+        const chunkSns = new Set(chunk.map(c => c.serial_number));
+        previewData.value.forEach(row => {
+          if (chunkSns.has(row.serial_number)) {
+            row.error = "반영 실패: " + error.message;
+          }
+        });
+        throw error;
+      }
     }
 
     alert(`${validRows.length}건의 재고가 성공적으로 반영되었습니다.\n(변동 이력 및 셀로 대기열 자동 생성됨)`);
