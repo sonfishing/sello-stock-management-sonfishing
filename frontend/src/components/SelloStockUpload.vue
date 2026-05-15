@@ -121,7 +121,7 @@ async function parseSelloExcel(file) {
       const chunkSns = sns.slice(i, i + queryChunkSize);
       const { data, error } = await supabase
         .from('products')
-        .select('serial_number, manage_name, quantity')
+        .select('id, serial_number, manage_name, quantity')
         .in('serial_number', chunkSns);
       
       if (error) {
@@ -143,7 +143,8 @@ async function parseSelloExcel(file) {
         row.error = "미등록 일련번호";
       } else {
         row.current_qty = dbMatch.quantity;
-        // DB의 정확한 일련번호를 보관 (대소문자/공백 차이로 인한 upsert 오류 방지)
+        // PK(id)를 직접 보관하여 가장 확실한 업데이트 방법 제공
+        row.db_id = dbMatch.id;
         row.db_serial_number = dbMatch.serial_number;
         if (!row.manage_name) row.manage_name = dbMatch.manage_name;
       }
@@ -171,7 +172,8 @@ async function uploadToSupabase() {
     // 500개 단위로 청크 분할하여 업로드 (성능 최적화)
     const chunkSize = 500;
     const uploadData = validRows.map(row => ({
-      serial_number: row.db_serial_number, // DB에 저장된 정확한 값을 사용
+      id: row.db_id, // 고유 ID(PK)를 사용하여 가장 확실하게 업데이트
+      serial_number: row.db_serial_number,
       quantity: row.new_qty,
       updated_at: new Date().toISOString()
     }));
