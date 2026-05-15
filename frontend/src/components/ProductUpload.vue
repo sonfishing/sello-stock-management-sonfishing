@@ -251,7 +251,17 @@ async function uploadToSupabase() {
             ignoreDuplicates: false 
           });
       
-      if (error) throw error;
+      if (error) {
+        // 해당 청크의 행들에 에러 메시지 표시
+        const chunkIds = new Set(chunk.map(c => c.serial_number).filter(id => id));
+        previewData.value.forEach(row => {
+          if (row.serial_number && chunkIds.has(Number(row.serial_number))) {
+            row.errors = row.errors || [];
+            row.errors.push("반영 실패: " + error.message);
+          }
+        });
+        throw error;
+      }
 
       processedCount += chunk.length;
       console.log(`Progress: ${processedCount} / ${validRows.length}`);

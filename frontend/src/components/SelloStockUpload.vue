@@ -143,6 +143,8 @@ async function parseSelloExcel(file) {
         row.error = "미등록 일련번호";
       } else {
         row.current_qty = dbMatch.quantity;
+        // DB의 정확한 일련번호를 보관 (대소문자/공백 차이로 인한 upsert 오류 방지)
+        row.db_serial_number = dbMatch.serial_number;
         if (!row.manage_name) row.manage_name = dbMatch.manage_name;
       }
       return row;
@@ -169,7 +171,7 @@ async function uploadToSupabase() {
     // 500개 단위로 청크 분할하여 업로드 (성능 최적화)
     const chunkSize = 500;
     const uploadData = validRows.map(row => ({
-      serial_number: row.serial_number,
+      serial_number: row.db_serial_number, // DB에 저장된 정확한 값을 사용
       quantity: row.new_qty,
       updated_at: new Date().toISOString()
     }));
