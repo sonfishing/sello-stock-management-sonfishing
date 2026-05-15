@@ -104,15 +104,23 @@ async function parseSelloExcel(file) {
       };
     }).filter(row => row.serial_number);
 
-    // 2. 현재 DB 재고 확인 (매칭 작업)
+    // 2. 현재 DB 재고 확인 (매칭 작업 - 500건씩 청크로 조회하여 Supabase 1000건 제한 우회)
     const sns = rows.map(r => r.serial_number);
-    const { data: dbProducts, error: dbError } = await supabase
-      .from('products')
-      .select('serial_number, manage_name, quantity')
-      .in('serial_number', sns);
+    let dbProducts = [];
+    const queryChunkSize = 500;
 
-    if (dbError) {
-      console.error("DB Match Error:", dbError);
+    for (let i = 0; i < sns.length; i += queryChunkSize) {
+      const chunkSns = sns.slice(i, i + queryChunkSize);
+      const { data, error } = await supabase
+        .from('products')
+        .select('serial_number, manage_name, quantity')
+        .in('serial_number', chunkSns);
+      
+      if (error) {
+        console.error("DB Match Chunk Error:", error);
+      } else if (data) {
+        dbProducts = dbProducts.concat(data);
+      }
     }
 
     const dbMap = {};
@@ -141,21 +149,28 @@ async function uploadToSupabase() {
 
   isUploading.value = true;
   try {
-    // 순차적으로 업데이트 (트리거가 각각 작동해야 하므로)
-    let successCount = 0;
-    for (const row of validRows) {
+    // 500개 단위로 청크 분할하여 업로드 (성능 최적화)
+    const chunkSize = 500;
+    const uploadData = validRows.map(row => ({
+      serial_number: row.serial_number,
+      quantity: row.new_qty,
+      updated_at: new Date().toISOString()
+    }));
+
+    for (let i = 0; i < uploadData.length; i += chunkSize) {
+      const chunk = uploadData.slice(i, i + chunkSize);
       const { error } = await supabase
         .from('products')
-        .update({ quantity: row.new_qty })
-        .eq('serial_number', row.serial_number);
+        .upsert(chunk, { onConflict: 'serial_number' });
       
-      if (!error) successCount++;
+      if (error) throw error;
     }
 
-    alert(`${successCount}건의 재고가 성공적으로 반영되었습니다.\n(변동 이력 및 셀로 대기열 자동 생성됨)`);
+    alert(`${validRows.length}건의 재고가 성공적으로 반영되었습니다.\n(변동 이력 및 셀로 대기열 자동 생성됨)`);
     emit('onUploadSuccess');
     clearData();
   } catch (err) {
+    console.error("Sello Upload Error:", err);
     alert("업로드 중 오류 발생: " + err.message);
   } finally {
     isUploading.value = false;

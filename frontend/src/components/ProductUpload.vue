@@ -227,39 +227,35 @@ async function uploadToSupabase() {
 
   // 에러 없는 데이터만 필터링 및 변환
   const validRows = previewData.value
-    .filter((row) => !row.errors?.length && row.serial_number)
+    .filter((row) => !row.errors?.length)
     .map(transformRow);
 
   if (validRows.length === 0) {
+    alert("업로드할 수 있는 유효한 데이터가 없습니다.");
     isUploading.value = false;
     return;
   }
 
   try {
-    // 1. 1,000개 단위로 청크(Chunk) 분할
-    const chunkSize = 1000;
-    const uploadPromises = [];
+    // 1. 500개 단위로 청크(Chunk) 분할 (서버 부하 및 타임아웃 방지)
+    const chunkSize = 500;
+    let processedCount = 0;
 
     for (let i = 0; i < validRows.length; i += chunkSize) {
       const chunk = validRows.slice(i, i + chunkSize);
       
-      // [최적화] 모든 요청을 병렬로 실행하여 대기 시간 단축
-      uploadPromises.push(
-        supabase
+      const { error } = await supabase
           .from("products")
           .upsert(chunk, { 
             onConflict: 'serial_number',
             ignoreDuplicates: false 
-          })
-      );
-    }
+          });
+      
+      if (error) throw error;
 
-    // 모든 병렬 요청 완료 대기
-    const results = await Promise.all(uploadPromises);
-    
-    // 에러 발생 여부 확인
-    const errors = results.filter(r => r.error).map(r => r.error);
-    if (errors.length > 0) throw errors[0];
+      processedCount += chunk.length;
+      console.log(`Progress: ${processedCount} / ${validRows.length}`);
+    }
 
     alert(`성공적으로 처리되었습니다! (총 ${validRows.length}건)`);
     emit('onUploadSuccess');
