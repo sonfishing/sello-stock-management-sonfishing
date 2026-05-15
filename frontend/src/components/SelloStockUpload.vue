@@ -76,14 +76,17 @@ async function parseSelloExcel(file) {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const jsonData = XLSX.utils.sheet_to_json(sheet);
 
-    // 1. 필요한 데이터 추출 및 매핑
-    const rows = jsonData.map(row => ({
-      serial_number: row['일련번호'] || row['serial_number'],
-      manage_name: row['관리상품명'] || row['manage_name'],
-      new_qty: row['재고'] || row['quantity'],
-      current_qty: null,
-      error: null
-    })).filter(row => row.serial_number);
+    // 1. 필요한 데이터 추출 및 매핑 (일련번호를 문자열로 정규화)
+    const rows = jsonData.map(row => {
+      const snValue = row['일련번호'] || row['serial_number'];
+      return {
+        serial_number: snValue ? String(snValue).trim() : null,
+        manage_name: row['관리상품명'] || row['manage_name'],
+        new_qty: row['재고'] || row['quantity'],
+        current_qty: null,
+        error: null
+      };
+    }).filter(row => row.serial_number);
 
     // 2. 현재 DB 재고 확인 (매칭 작업)
     const sns = rows.map(r => r.serial_number);
@@ -94,7 +97,9 @@ async function parseSelloExcel(file) {
 
     const dbMap = {};
     dbProducts?.forEach(p => {
-      dbMap[p.serial_number] = p;
+      // DB의 일련번호도 문자열로 정규화하여 매핑
+      const snKey = String(p.serial_number).trim();
+      dbMap[snKey] = p;
     });
 
     previewData.value = rows.map(row => {

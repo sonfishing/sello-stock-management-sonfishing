@@ -169,7 +169,7 @@
                           @dblclick="onDoubleClick(row.rIdx, cIdx)"
                           :class="{ 
                             'cell-selected': isSelected(row.rIdx, cIdx),
-                            'readonly-cell': key === 'serial_number' || key === 'updated_at'
+                            'no-edit-cell': key === 'serial_number' || key === 'updated_at'
                           }"
                           class="excel-cell">
                         

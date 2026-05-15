@@ -181,10 +181,10 @@ body {
   user-select: none;
 }
 .vis-label:hover { background: #E8F3FF; }
-.vis-label.active {
-  background: var(--primary);
-  color: #fff;
-  border-color: var(--primary);
+.vis-label.active, .dl-col-chip.active {
+  background: var(--primary) !important;
+  color: #fff !important;
+  border-color: var(--primary) !important;
 }
 .vis-label.is-dragging {
   opacity: 0.5;
@@ -293,11 +293,6 @@ body {
   user-select: none;
 }
 .dl-col-chip:hover { background: #E8F3FF; }
-.dl-col-chip.active {
-  background: var(--primary);
-  color: #fff;
-  border-color: var(--primary);
-}
 
 .btn-clear-modified {
   background: none;
@@ -469,11 +464,10 @@ body {
   box-shadow: inset 0 0 0 1px var(--primary) !important;
   z-index: 5;
 }
-.readonly-cell {
-  background-color: #F2F4F6 !important;
+.no-edit-cell {
   cursor: not-allowed !important;
 }
-.readonly-cell:hover {
+.readonly-cell:hover, .no-edit-cell:hover {
   box-shadow: none !important;
 }
 .cell-selected {
