@@ -469,6 +469,13 @@ body {
   box-shadow: inset 0 0 0 1px var(--primary) !important;
   z-index: 5;
 }
+.readonly-cell {
+  background-color: #F2F4F6 !important;
+  cursor: not-allowed !important;
+}
+.readonly-cell:hover {
+  box-shadow: none !important;
+}
 .cell-selected {
   background-color: var(--primary-light);
   box-shadow: inset 0 0 0 2px var(--primary) !important;

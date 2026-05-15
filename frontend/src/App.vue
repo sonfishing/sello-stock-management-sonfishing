@@ -167,7 +167,10 @@
                           @mousedown.stop="onMouseDown(row.rIdx, cIdx, $event)"
                           @mouseenter="onMouseEnter(row.rIdx, cIdx)"
                           @dblclick="onDoubleClick(row.rIdx, cIdx)"
-                          :class="{ 'cell-selected': isSelected(row.rIdx, cIdx) }"
+                          :class="{ 
+                            'cell-selected': isSelected(row.rIdx, cIdx),
+                            'readonly-cell': key === 'serial_number' || key === 'updated_at'
+                          }"
                           class="excel-cell">
                         
                         <template v-if="isEditing(row.rIdx, cIdx)">
@@ -584,11 +587,17 @@ function clearNewEntries() {
 
 // ─── Excel Download Modal ─────────────────────────────────────────────────────
 const downloadMode = ref('all'); // 'all' | 'modified'
+const DOWNLOAD_COLS_KEY = 'downloadCols';
 const downloadCols = ref(
+  JSON.parse(localStorage.getItem(DOWNLOAD_COLS_KEY)) || 
   Object.fromEntries(Object.keys(defaultCols).map(k => [
     k, k === 'serial_number' || k === 'manage_name'
   ]))
 );
+
+watch(downloadCols, (newVal) => {
+  localStorage.setItem(DOWNLOAD_COLS_KEY, JSON.stringify(newVal));
+}, { deep: true });
 
 function openDownloadModal() {
   showDownloadModal.value = true;
@@ -682,6 +691,16 @@ async function doDownloadExcel() {
   a.click();
   URL.revokeObjectURL(url);
   addToast(`다운로드 완료 (${products.length}개)`);
+
+  if (modifiedIds.value.size > 0) {
+    setTimeout(() => {
+      if (confirm('수정한 항목 기록을 지울까요?')) {
+        clearModified();
+        clearNewEntries();
+        addToast('기록이 삭제되었습니다.');
+      }
+    }, 500);
+  }
 }
 
 async function exportSelloStock() {
@@ -1110,6 +1129,11 @@ function onMouseEnter(r, c) {
 }
 
 function onDoubleClick(r, c) {
+  const key = visibleColsKeys.value[c];
+  if (key === 'serial_number') {
+    addToast('일련번호는 수동으로 수정할 수 없습니다. (엑셀 업로드 이용)');
+    return;
+  }
   editingCell.value = { r, c };
   nextTick(() => {
     const el = document.getElementById(`edit-${r}-${c}`);
@@ -1190,7 +1214,12 @@ function handleGlobalKeydown(e) {
             updates.updated_at = new Date().toISOString();
             promises.push(supabase.from('products').update(updates).eq('id', product.id));
             updateCount++;
-            markModified(product.id);
+            
+            // Only mark modified if non-quantity fields were changed
+            const changedKeys = Object.keys(updates).filter(k => k !== 'updated_at');
+            if (changedKeys.some(k => k !== 'quantity')) {
+              markModified(product.id);
+            }
          }
       }
       
@@ -1290,7 +1319,11 @@ async function handleGlobalPaste(e) {
         updates.updated_at = new Date().toISOString();
         promises.push(supabase.from('products').update(updates).eq('id', product.id));
         updateCount++;
-        markModified(product.id);
+        
+        const changedKeys = Object.keys(updates).filter(k => k !== 'updated_at');
+        if (changedKeys.some(k => k !== 'quantity')) {
+          markModified(product.id);
+        }
       }
    }
    
@@ -1340,7 +1373,9 @@ async function updateField(id, field, value) {
     console.error("Error updating:", error);
     alert("수정 실패: " + error.message);
   } else {
-    markModified(id);
+    if (field !== 'quantity') {
+      markModified(id);
+    }
     pushToUndo([{ id, field, oldValue, oldUpdatedAt }]);
     if (active && tabProducts.value[active]) {
       const idx = tabProducts.value[active].findIndex(p => p.id === id);
