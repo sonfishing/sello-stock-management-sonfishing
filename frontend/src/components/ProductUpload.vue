@@ -127,7 +127,11 @@ function parseExcel(file) {
 
     const getValue = (row, key) => {
       const idx = headerMap[key];
-      return idx !== undefined ? row[idx] : null;
+      let val = idx !== undefined ? row[idx] : null;
+      if (typeof val === 'string') {
+        return val.replace(/["']/g, '').trim();
+      }
+      return val;
     };
 
     previewData.value = rows

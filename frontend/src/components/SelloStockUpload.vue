@@ -91,9 +91,13 @@ async function parseSelloExcel(file) {
       const nameValue = nameKey ? row[nameKey] : (row['관리상품명'] || row['manage_name']);
       const qtyValue = qtyKey ? row[qtyKey] : (row['재고'] || row['quantity'] || row['qty']);
       
+      // 따옴표 제거 및 공백 정리
+      const cleanSn = snValue ? String(snValue).replace(/["']/g, '').trim() : null;
+      const cleanName = nameValue ? String(nameValue).replace(/["']/g, '').trim() : '';
+
       return {
-        serial_number: snValue ? String(snValue).trim() : null,
-        manage_name: nameValue || '',
+        serial_number: cleanSn,
+        manage_name: cleanName,
         new_qty: qtyValue !== undefined ? Number(qtyValue) : 0,
         current_qty: null,
         error: null

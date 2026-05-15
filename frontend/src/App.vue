@@ -669,7 +669,7 @@ async function doDownloadExcel() {
   if (products.length === 0) { addToast('다운로드할 데이터가 없습니다.'); return; }
 
   // Build CSV
-  const headers = selectedKeys.map(k => defaultCols[k].label);
+  const headersRow = selectedKeys.map(k => `"${defaultCols[k].label.replace(/"/g, '""')}"`).join(',');
   const rows = products.map(p =>
     selectedKeys.map(k => {
       const val = p[k];
@@ -679,7 +679,7 @@ async function doDownloadExcel() {
       return String(val).replace(/"/g, '""');
     }).map(v => `"${v}"`).join(',')
   );
-  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+  const csvContent = '\uFEFF' + [headersRow, ...rows].join('\n');
 
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -760,6 +760,7 @@ async function exportSelloStock() {
 
   // 4. Build CSV
   const headers = ['일련번호', '관리상품명', '재고증감값', '사유'];
+  const headersRow = headers.map(h => `"${h.replace(/"/g, '""')}"`).join(',');
   const rows = queueItems.map(item => {
     const name = prodMap[item.serial_number] || '';
     const reason = reasonMap[item.serial_number] || '';
@@ -768,10 +769,10 @@ async function exportSelloStock() {
       name,
       item.delta_qty,
       reason
-    ].map(v => `"${String(v !== null ? v : '').replace(/"/g, '""')}"`).join(',');
+    ].map(v => `"${String(v !== null && v !== undefined ? v : '').replace(/"/g, '""')}"`).join(',');
   });
 
-  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+  const csvContent = '\uFEFF' + [headersRow, ...rows].join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
