@@ -178,21 +178,33 @@ async function uploadToSupabase() {
       updated_at: new Date().toISOString()
     }));
 
-    for (let i = 0; i < uploadData.length; i += chunkSize) {
-      const chunk = uploadData.slice(i, i + chunkSize);
-      const { error } = await supabase
-        .from('products')
-        .upsert(chunk, { onConflict: 'serial_number' });
+    for (let i = 0; i < validRows.length; i += chunkSize) {
+      const chunk = validRows.slice(i, i + chunkSize);
       
-      if (error) {
+      // 개별 업데이트를 병렬로 실행하여 성능 유지하면서 'INSERT' 원천 차단
+      const updatePromises = chunk.map(row => 
+        supabase
+          .from('products')
+          .update({ 
+            quantity: row.new_qty, 
+            updated_at: new Date().toISOString() 
+          })
+          .eq('id', row.db_id)
+      );
+
+      const results = await Promise.all(updatePromises);
+      
+      // 개별 결과 중 에러가 있는지 확인
+      const errorResult = results.find(r => r.error);
+      if (errorResult) {
         // 해당 청크의 행들에 에러 메시지 표시
-        const chunkSns = new Set(chunk.map(c => c.serial_number));
+        const chunkIds = new Set(chunk.map(c => c.db_id));
         previewData.value.forEach(row => {
-          if (chunkSns.has(row.serial_number)) {
-            row.error = "반영 실패: " + error.message;
+          if (chunkIds.has(row.db_id)) {
+            row.error = "반영 실패: " + errorResult.error.message;
           }
         });
-        throw error;
+        throw errorResult.error;
       }
     }
 
