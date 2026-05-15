@@ -76,13 +76,25 @@ async function parseSelloExcel(file) {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const jsonData = XLSX.utils.sheet_to_json(sheet);
 
-    // 1. 필요한 데이터 추출 및 매핑 (일련번호를 문자열로 정규화)
+    const headers = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
+    
+    // 유연한 컬럼명 매칭 (트리밍 및 대소문자 무시)
+    const findKey = (names) => headers.find(h => names.includes(String(h).trim().toLowerCase()));
+    
+    const snKey = findKey(['일련번호', 'serial_number', 'serial number', 'sn']);
+    const nameKey = findKey(['관리상품명', 'manage_name', 'product_name', 'product name', 'name']);
+    const qtyKey = findKey(['재고', 'quantity', 'qty', 'stock']);
+
+    // 1. 필요한 데이터 추출 및 매핑
     const rows = jsonData.map(row => {
-      const snValue = row['일련번호'] || row['serial_number'];
+      const snValue = snKey ? row[snKey] : (row['일련번호'] || row['serial_number']);
+      const nameValue = nameKey ? row[nameKey] : (row['관리상품명'] || row['manage_name']);
+      const qtyValue = qtyKey ? row[qtyKey] : (row['재고'] || row['quantity'] || row['qty']);
+      
       return {
         serial_number: snValue ? String(snValue).trim() : null,
-        manage_name: row['관리상품명'] || row['manage_name'],
-        new_qty: row['재고'] || row['quantity'],
+        manage_name: nameValue || '',
+        new_qty: qtyValue !== undefined ? Number(qtyValue) : 0,
         current_qty: null,
         error: null
       };
@@ -90,14 +102,17 @@ async function parseSelloExcel(file) {
 
     // 2. 현재 DB 재고 확인 (매칭 작업)
     const sns = rows.map(r => r.serial_number);
-    const { data: dbProducts } = await supabase
+    const { data: dbProducts, error: dbError } = await supabase
       .from('products')
       .select('serial_number, manage_name, quantity')
       .in('serial_number', sns);
 
+    if (dbError) {
+      console.error("DB Match Error:", dbError);
+    }
+
     const dbMap = {};
     dbProducts?.forEach(p => {
-      // DB의 일련번호도 문자열로 정규화하여 매핑
       const snKey = String(p.serial_number).trim();
       dbMap[snKey] = p;
     });
