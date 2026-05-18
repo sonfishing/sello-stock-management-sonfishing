@@ -156,9 +156,8 @@
                         <div class="cell-action-wrapper">
                           <button v-if="!isBulkMode" 
                                   class="add-row-btn" 
-                                  :class="{ 'remove-btn': newEntriesIds.has(row.product.id) }"
-                                  @click.stop="newEntriesIds.has(row.product.id) ? deleteRow(row.product.id) : quickAddRow(row.product)">
-                            {{ newEntriesIds.has(row.product.id) ? '-' : '+' }}
+                                  @click.stop="quickAddRow(row.product)">
+                            +
                           </button>
                           <span v-if="newEntriesIds.has(row.product.id)" class="new-badge">NEW</span>
                           <span v-else-if="modifiedIds.has(row.product.id)" class="update-badge">UPDATE</span>
@@ -1217,6 +1216,14 @@ function handleGlobalKeydown(e) {
     return;
   }
 
+  // 엔터 키 입력 시 해당 셀 편집 모드로 전환 (엑셀 스타일 - 더블클릭 효과)
+  if (e.key === 'Enter') {
+    if (!selEnd.value) return;
+    e.preventDefault();
+    onDoubleClick(selEnd.value.r, selEnd.value.c);
+    return;
+  }
+
   // 화살표 방향키 이동 기능 (엑셀 스타일)
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
     if (!selStart.value || !selEnd.value) return;
@@ -1417,7 +1424,12 @@ function closeAndSave(product, key, newVal) {
     editingCell.value = null; // hide input immediately
   }
   
-  if (String(product[key]) !== String(newVal)) {
+  // DB의 null/undefined 값을 빈 문자열로 간주하여 비교 오류 방지
+  const oldVal = product[key];
+  const oldStr = (oldVal === null || oldVal === undefined) ? "" : String(oldVal);
+  const newStr = (newVal === null || newVal === undefined) ? "" : String(newVal);
+
+  if (oldStr !== newStr) {
     updateField(product.id, key, newVal);
   }
 }
