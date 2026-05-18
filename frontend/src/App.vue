@@ -816,24 +816,50 @@ async function exportSelloStock() {
 }
 
 async function quickAddRow(source) {
-  // Extract base code (remove everything after '-')
-  let baseCode = (source.manage_code || '').split('-')[0].trim();
+  // 관리코드 계산 로직 (숫자 자동 증가)
+  let newManageCode = source.manage_code || '';
+  const match = newManageCode.match(/(.+)-(\d+)$/);
+  if (match) {
+    const prefix = match[1];
+    let num = parseInt(match[2], 10);
+    const existingCodes = new Set();
+    const currentTabProducts = tabProducts.value[activeTab.value] || [];
+    currentTabProducts.forEach(p => {
+      if (p.manage_code) existingCodes.add(p.manage_code);
+    });
+    
+    while (true) {
+      num++;
+      const candidate = `${prefix}-${num}`;
+      if (!existingCodes.has(candidate)) {
+        newManageCode = candidate;
+        break;
+      }
+    }
+  } else {
+    // -숫자 형태가 아니면 기본적으로 기존 로직 사용 ('-' 뒤의 값 제거)
+    newManageCode = (source.manage_code || '').split('-')[0].trim();
+  }
+
   // Extract base name (remove everything after ':', but keep ':')
   let baseName = (source.manage_name || '').split(':')[0].trim();
   if ((source.manage_name || '').includes(':')) {
     baseName += ':';
   }
   
+  const newPrintName = `[${newManageCode}] ${baseName}`.trim();
+  const newLocation = `[${newManageCode}]`;
+  
   const newProduct = {
-    manage_code: baseCode,
+    manage_code: newManageCode,
     manage_name: baseName,
     purchase_price: source.purchase_price || 0,
     consumer_price: source.consumer_price || 0,
     quantity: 0,
     safety_quantity: source.safety_quantity || 0,
-    location: source.location || '',
+    location: newLocation,
     supplier: source.supplier || '',
-    print_name: baseName,
+    print_name: newPrintName,
     is_deleted: false
   };
 
@@ -1191,6 +1217,32 @@ function handleGlobalKeydown(e) {
     return;
   }
 
+  // 화살표 방향키 이동 기능 (엑셀 스타일)
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+    if (!selStart.value || !selEnd.value) return;
+    
+    e.preventDefault(); // 스크롤 방지
+    
+    const maxR = itemsOnlyGrid.value.length - 1;
+    const maxC = visibleColsKeys.value.length - 1;
+    
+    let targetR = selEnd.value.r;
+    let targetC = selEnd.value.c;
+    
+    if (e.key === 'ArrowUp') targetR = Math.max(0, targetR - 1);
+    if (e.key === 'ArrowDown') targetR = Math.min(maxR, targetR + 1);
+    if (e.key === 'ArrowLeft') targetC = Math.max(0, targetC - 1);
+    if (e.key === 'ArrowRight') targetC = Math.min(maxC, targetC + 1);
+    
+    if (e.shiftKey) {
+      selEnd.value = { r: targetR, c: targetC };
+    } else {
+      selStart.value = { r: targetR, c: targetC };
+      selEnd.value = { r: targetR, c: targetC };
+    }
+    return;
+  }
+
   if (e.key === 'Delete' || e.key === 'Backspace') {
       if (!selStart.value || !selEnd.value) return;
       
@@ -1374,12 +1426,17 @@ async function updateField(id, field, value) {
   // Get old value for undo
   let oldValue = null;
   let oldUpdatedAt = null;
+  let productCode = null;
+  let productName = null;
+  
   const active = activeTab.value;
   if (active && tabProducts.value[active]) {
     const p = tabProducts.value[active].find(p => p.id === id);
     if (p) {
       oldValue = p[field];
       oldUpdatedAt = p.updated_at;
+      productCode = p.manage_code;
+      productName = p.manage_name;
     }
   }
 
@@ -1387,6 +1444,16 @@ async function updateField(id, field, value) {
     [field]: value,
     updated_at: new Date().toISOString()
   };
+
+  // 상품명이나 관리코드를 수정하면 인쇄상품명과 위치 자동 업데이트
+  if (field === 'manage_name' || field === 'manage_code') {
+    const newCode = field === 'manage_code' ? value : productCode;
+    const newName = field === 'manage_name' ? value : productName;
+    
+    const codeStr = newCode ? `[${newCode}] ` : '';
+    updates.print_name = `${codeStr}${newName || ''}`.trim();
+    updates.location = newCode ? `[${newCode}]` : '';
+  }
    
   const { error } = await supabase
     .from("products")
