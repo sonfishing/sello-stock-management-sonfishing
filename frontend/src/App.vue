@@ -146,7 +146,8 @@
                     <tr v-else class="item-row" 
                         :class="{ 
                           'single-item-row': !row.idxInGroup && row.idxInGroup !== 0,
-                          'bulk-selected': selectedBulkIds.has(row.product.id)
+                          'bulk-selected': selectedBulkIds.has(row.product.id),
+                          'modified-row': modifiedIds.has(row.product.id) && !newEntriesIds.has(row.product.id)
                         }" 
                         :style="{ backgroundColor: row.color || '#fff' }"
                         @click="isBulkMode ? toggleBulkSelection(row.product.id) : null">
@@ -160,6 +161,7 @@
                             {{ newEntriesIds.has(row.product.id) ? '-' : '+' }}
                           </button>
                           <span v-if="newEntriesIds.has(row.product.id)" class="new-badge">NEW</span>
+                          <span v-else-if="modifiedIds.has(row.product.id)" class="update-badge">UPDATE</span>
                         </div>
                       </td>
 
