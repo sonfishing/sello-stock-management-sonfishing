@@ -1209,6 +1209,7 @@ function isEditing(r, c) {
 // Global key handlers for Copy and Delete
 function handleGlobalKeydown(e) {
   if (editingCell.value) return; // Native logic
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   
   if (e.key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
