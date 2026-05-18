@@ -205,13 +205,17 @@
 
                         <!-- Standard readable view -->
                         <template v-else>
-                          <div class="padding-cell text-content">
+                          <div class="padding-cell text-content" :class="{ 'image-cell': key === 'image_url' }">
                              <template v-if="key === 'is_hidden'">{{ row.product.is_hidden ? '숨김' : '노출' }}</template>
                              <template v-else-if="key === 'updated_at'">
                                <span class="text-muted">{{ formatDate(row.product.updated_at) }}</span>
                              </template>
                              <template v-else-if="key === 'manage_name' && row.idxInGroup !== undefined">
                                {{ getShortName(row.product.manage_name) }}
+                             </template>
+                             <template v-else-if="key === 'image_url'">
+                               <img v-if="row.product.image_url" :src="row.product.image_url" style="max-height: 40px; max-width: 100%; object-fit: contain; border-radius: 4px; display: block;" alt="img" />
+                               <span v-else class="text-muted">-</span>
                              </template>
                              <template v-else>{{ row.product[key] }}</template>
                           </div>
@@ -668,6 +672,13 @@ async function doDownloadExcel() {
 
   if (products.length === 0) { addToast('다운로드할 데이터가 없습니다.'); return; }
 
+  // 다운로드 전 자연 정렬 (Natural Sort)
+  products.sort((a, b) => {
+    const codeA = (a.manage_code || '').trim();
+    const codeB = (b.manage_code || '').trim();
+    return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+  });
+
   // Build CSV
   const headersRow = selectedKeys.map(k => `"${defaultCols[k].label.replace(/"/g, '""')}"`).join(',');
   const rows = products.map(p =>
@@ -1000,6 +1011,16 @@ async function loadTab(tab, forceSearch = false) {
     
     const { data, error } = await query;
     if (error) throw error;
+    
+    // 자연 정렬 (Natural Sort): 알파벳과 숫자를 분리하여 숫자 크기대로 정렬 (1, 2, 10, 11...)
+    if (data) {
+      data.sort((a, b) => {
+        const codeA = (a.manage_code || '').trim();
+        const codeB = (b.manage_code || '').trim();
+        return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+      });
+    }
+    
     tabProducts.value[tab] = data;
   } finally {
     loadingTabs.value.delete(tab);

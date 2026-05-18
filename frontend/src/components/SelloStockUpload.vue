@@ -81,7 +81,7 @@ const emit = defineEmits(['onUploadSuccess']);
 const fileInput = ref(null);
 const previewData = ref([]);
 const isUploading = ref(false);
-const skipSelloUpload = ref(false);
+const skipSelloUpload = ref(true);
 const updateMode = ref('delta');
 const customReason = ref('');
 
