@@ -8,9 +8,26 @@
       </div>
     </div>
 
-    <div style="margin-top: 15px; display: flex; align-items: center; gap: 8px; justify-content: center;">
-      <input type="checkbox" id="skipSelloUpload" v-model="skipSelloUpload" style="width: 18px; height: 18px; cursor: pointer;" />
-      <label for="skipSelloUpload" style="cursor: pointer; font-weight: 500; color: var(--text-color);">셀로에서 업로드 (변경 내용 다운로드에 반영 없음)</label>
+    <div style="margin-top: 15px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <input type="checkbox" id="skipSelloUpload" v-model="skipSelloUpload" style="width: 18px; height: 18px; cursor: pointer;" />
+        <label for="skipSelloUpload" style="cursor: pointer; font-weight: 500; color: var(--text-color);">셀로에서 업로드 (변경 내용 다운로드에 반영 없음)</label>
+      </div>
+      
+      <div v-if="!skipSelloUpload" style="display: flex; flex-direction: column; gap: 10px; align-items: center; background: var(--surface); padding: 15px; border-radius: 8px; width: 100%; max-width: 600px; border: 1px solid var(--border-color);">
+        <div style="display: flex; gap: 20px;">
+          <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+            <input type="radio" v-model="updateMode" value="delta" /> 증감분 반영 (기존 재고에 더하기/빼기)
+          </label>
+          <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+            <input type="radio" v-model="updateMode" value="absolute" /> 실재고 반영 (현재 전산 재고를 강제 변경)
+          </label>
+        </div>
+        <div style="display: flex; width: 100%; align-items: center; gap: 8px;">
+          <span style="white-space: nowrap; font-weight: 500;">사유:</span>
+          <input type="text" v-model="customReason" placeholder="재고 변경 사유를 입력하세요 (선택)" style="flex: 1; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-main); color: var(--text-color);" />
+        </div>
+      </div>
     </div>
 
     <div v-if="previewData.length > 0" class="preview-section">
@@ -31,7 +48,8 @@
               <th>일련번호</th>
               <th>관리상품명</th>
               <th>현재고</th>
-              <th>변경후</th>
+              <th>엑셀수량</th>
+              <th>최종재고</th>
               <th>상태</th>
             </tr>
           </thead>
@@ -40,7 +58,8 @@
               <td>{{ row.serial_number }}</td>
               <td>{{ row.manage_name }}</td>
               <td>{{ row.current_qty ?? '-' }}</td>
-              <td class="new-qty">{{ row.new_qty }}</td>
+              <td>{{ row.new_qty > 0 && updateMode === 'delta' && !skipSelloUpload ? '+' + row.new_qty : row.new_qty }}</td>
+              <td class="new-qty">{{ getFinalQty(row) }}</td>
               <td>
                 <span v-if="row.error" class="error-badge">{{ row.error }}</span>
                 <span v-else class="success-badge">매칭완료</span>
@@ -63,6 +82,16 @@ const fileInput = ref(null);
 const previewData = ref([]);
 const isUploading = ref(false);
 const skipSelloUpload = ref(false);
+const updateMode = ref('delta');
+const customReason = ref('');
+
+function getFinalQty(row) {
+  if (row.current_qty === null) return '-';
+  if (skipSelloUpload.value || updateMode.value === 'absolute') {
+    return Number(row.new_qty);
+  }
+  return Number(row.current_qty) + Number(row.new_qty);
+}
 
 function handleFileSelect(event) {
   const file = event.target.files[0];
@@ -161,12 +190,12 @@ async function parseSelloExcel(file) {
 }
 
 async function uploadToSupabase() {
-  // 에러가 없고, DB에 존재하며(current_qty !== null), 재고 수량이 변동된 경우만 필터링
-  const validRows = previewData.value.filter(r => 
-    !r.error && 
-    r.current_qty !== null && 
-    Number(r.current_qty) !== Number(r.new_qty)
-  );
+  // 변동된 재고 정보 필터링
+  const validRows = previewData.value.filter(r => {
+    if (r.error || r.current_qty === null) return false;
+    let finalQty = getFinalQty(r);
+    return Number(r.current_qty) !== Number(finalQty);
+  });
   
   if (validRows.length === 0) {
     alert("변경할 재고 정보가 없거나 이미 최신 상태입니다.");
@@ -177,26 +206,45 @@ async function uploadToSupabase() {
   try {
     // 500개 단위로 청크 분할하여 업로드 (성능 최적화)
     const chunkSize = 500;
-    const uploadData = validRows.map(row => ({
-      id: row.db_id, // 고유 ID(PK)를 사용하여 가장 확실하게 업데이트
-      serial_number: row.db_serial_number,
-      quantity: row.new_qty,
-      updated_at: new Date().toISOString()
-    }));
 
     for (let i = 0; i < validRows.length; i += chunkSize) {
       const chunk = validRows.slice(i, i + chunkSize);
       
-      // 개별 업데이트를 병렬로 실행하여 성능 유지하면서 'INSERT' 원천 차단
-      const updatePromises = chunk.map(row => 
-        supabase
-          .from('products')
-          .update({ 
-            quantity: row.new_qty, 
-            updated_at: new Date().toISOString() 
-          })
-          .eq('id', row.db_id)
-      );
+      const updatePromises = chunk.map(row => {
+        let finalNewQty = 0;
+        let finalChangeQty = 0;
+        let source_type = 'EXCEL_UPLOAD';
+        let reason = customReason.value || '엑셀 업로드';
+
+        if (skipSelloUpload.value) {
+          finalNewQty = Number(row.new_qty);
+          finalChangeQty = finalNewQty - Number(row.current_qty);
+          source_type = 'SELLO_ORDER';
+          const today = new Date();
+          const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+          reason = `${dateStr} 셀로 업로드`;
+        } else {
+          if (updateMode.value === 'delta') {
+            finalChangeQty = Number(row.new_qty);
+            finalNewQty = Number(row.current_qty) + finalChangeQty;
+          } else {
+            finalNewQty = Number(row.new_qty);
+            finalChangeQty = finalNewQty - Number(row.current_qty);
+          }
+        }
+
+        // stock_adjustment_log에 INSERT하여 DB 트리거 동작 (fn_process_from_log_table)
+        return supabase
+          .from('stock_adjustment_log')
+          .insert({
+            serial_number: row.db_serial_number,
+            old_qty: row.current_qty,
+            new_qty: finalNewQty,
+            change_qty: finalChangeQty,
+            source_type: source_type,
+            reason: reason
+          });
+      });
 
       const results = await Promise.all(updatePromises);
       
@@ -211,20 +259,6 @@ async function uploadToSupabase() {
           }
         });
         throw errorResult.error;
-      }
-
-      // 셀로 다운로드에 반영하지 않도록 체크된 경우, 트리거에 의해 생성된 대기열을 바로 삭제
-      if (skipSelloUpload.value) {
-        const chunkSerialNumbers = chunk.map(r => r.db_serial_number);
-        const { error: deleteError } = await supabase
-          .from('sello_upload_queue')
-          .delete()
-          .in('serial_number', chunkSerialNumbers)
-          .eq('status', 'PENDING');
-        
-        if (deleteError) {
-          console.error("Queue deletion error:", deleteError);
-        }
       }
     }
 
