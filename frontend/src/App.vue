@@ -59,7 +59,7 @@
           <span class="icon">⚙️</span><span class="btn-label"> 설정</span>
         </button>
         <button class="menu-btn" @click="showSelloUploadModal = true">
-          <span class="icon">📦</span><span class="btn-label"> 셀로재고업로드</span>
+          <span class="icon">📦</span><span class="btn-label"> 재고업로드</span>
         </button>
         <button class="menu-btn sello-send-btn" @click="exportSelloStock">
           <span class="icon">📤</span>
@@ -250,7 +250,7 @@
   <div v-if="showSelloUploadModal" class="modal-overlay" @click.self="showSelloUploadModal = false">
     <div class="modal-box" style="max-width: 1000px; max-height: 90vh; overflow: auto;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2 class="modal-title">📦 셀로 재고 수정 (엑셀 업로드)</h2>
+        <h2 class="modal-title">📦 재고 수정 (엑셀 업로드)</h2>
         <button @click="showSelloUploadModal = false" style="background:none; border:none; font-size: 24px; cursor:pointer;">&times;</button>
       </div>
       <SelloStockUpload @onUploadSuccess="showSelloUploadModal = false; loadTab(activeTab, true); updatePendingSelloCount();" />

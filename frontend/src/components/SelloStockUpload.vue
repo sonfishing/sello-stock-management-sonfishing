@@ -3,9 +3,14 @@
     <div class="upload-area" @dragover.prevent @drop.prevent="handleDrop">
       <input type="file" accept=".xlsx, .xls" @change="handleFileSelect" ref="fileInput" />
       <div class="upload-hint">
-        <p>📦 <strong>셀로 재고수정 엑셀</strong>을 선택하거나 여기로 드래그하세요</p>
+        <p>📦 <strong>재고수정 엑셀</strong>을 선택하거나 여기로 드래그하세요</p>
         <p class="format-hint">필수 컬럼: 일련번호(serial_number), 재고</p>
       </div>
+    </div>
+
+    <div style="margin-top: 15px; display: flex; align-items: center; gap: 8px; justify-content: center;">
+      <input type="checkbox" id="skipSelloUpload" v-model="skipSelloUpload" style="width: 18px; height: 18px; cursor: pointer;" />
+      <label for="skipSelloUpload" style="cursor: pointer; font-weight: 500; color: var(--text-color);">셀로에서 업로드 (변경 내용 다운로드에 반영 없음)</label>
     </div>
 
     <div v-if="previewData.length > 0" class="preview-section">
@@ -57,6 +62,7 @@ const emit = defineEmits(['onUploadSuccess']);
 const fileInput = ref(null);
 const previewData = ref([]);
 const isUploading = ref(false);
+const skipSelloUpload = ref(false);
 
 function handleFileSelect(event) {
   const file = event.target.files[0];
@@ -206,9 +212,23 @@ async function uploadToSupabase() {
         });
         throw errorResult.error;
       }
+
+      // 셀로 다운로드에 반영하지 않도록 체크된 경우, 트리거에 의해 생성된 대기열을 바로 삭제
+      if (skipSelloUpload.value) {
+        const chunkSerialNumbers = chunk.map(r => r.db_serial_number);
+        const { error: deleteError } = await supabase
+          .from('sello_upload_queue')
+          .delete()
+          .in('serial_number', chunkSerialNumbers)
+          .eq('status', 'PENDING');
+        
+        if (deleteError) {
+          console.error("Queue deletion error:", deleteError);
+        }
+      }
     }
 
-    alert(`${validRows.length}건의 재고가 성공적으로 반영되었습니다.\n(변동 이력 및 셀로 대기열 자동 생성됨)`);
+    alert(`${validRows.length}건의 재고가 성공적으로 반영되었습니다.${!skipSelloUpload.value ? '\\n(변동 이력 및 셀로 대기열 자동 생성됨)' : ''}`);
     emit('onUploadSuccess');
     clearData();
   } catch (err) {
