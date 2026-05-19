@@ -771,14 +771,18 @@ async function doDownloadExcel() {
 async function exportSelloStock() {
   addToast('셀로 재고 데이터 조회 중...');
   
-  // 1. Fetch PENDING items from sello_upload_queue
-  const { data: queueItems, error: queueError } = await supabase
-    .from('sello_upload_queue')
-    .select('*')
-    .eq('status', 'PENDING');
-
-  if (queueError) {
-    addToast('대기열 조회 실패: ' + queueError.message);
+  let queueItems = [];
+  try {
+    // 1. Fetch PENDING items from sello_upload_queue (전체 페이징 조회)
+    queueItems = await fetchAllProducts((from, to) =>
+      supabase
+        .from('sello_upload_queue')
+        .select('*')
+        .eq('status', 'PENDING')
+        .range(from, to)
+    );
+  } catch (err) {
+    addToast('대기열 조회 실패: ' + err.message);
     return;
   }
 
@@ -787,24 +791,47 @@ async function exportSelloStock() {
     return;
   }
 
-  // 2. Fetch product names
+  // 2. Fetch product names in chunks of 500 serials (Postgres & URL 길이 제한 방지)
   const serials = [...new Set(queueItems.map(item => item.serial_number))];
-  const { data: products, error: prodError } = await supabase
-    .from('products')
-    .select('serial_number, manage_name')
-    .in('serial_number', serials);
-
-  if (prodError) {
-    addToast('상품 정보 조회 실패: ' + prodError.message);
+  const products = [];
+  const CHUNK_SIZE = 500;
+  
+  try {
+    for (let i = 0; i < serials.length; i += CHUNK_SIZE) {
+      const chunk = serials.slice(i, i + CHUNK_SIZE);
+      const chunkProducts = await fetchAllProducts((from, to) =>
+        supabase
+          .from('products')
+          .select('serial_number, manage_name')
+          .in('serial_number', chunk)
+          .range(from, to)
+      );
+      products.push(...chunkProducts);
+    }
+  } catch (err) {
+    addToast('상품 정보 조회 실패: ' + err.message);
     return;
   }
 
-  // 3. Fetch latest reasons from stock_adjustment_log
-  const { data: logs, error: logError } = await supabase
-    .from('stock_adjustment_log')
-    .select('serial_number, reason, created_at')
-    .in('serial_number', serials)
-    .order('created_at', { ascending: false });
+  // 3. Fetch latest reasons in chunks of 500 serials
+  const logs = [];
+  try {
+    for (let i = 0; i < serials.length; i += CHUNK_SIZE) {
+      const chunk = serials.slice(i, i + CHUNK_SIZE);
+      const chunkLogs = await fetchAllProducts((from, to) =>
+        supabase
+          .from('stock_adjustment_log')
+          .select('serial_number, reason, created_at')
+          .in('serial_number', chunk)
+          .order('created_at', { ascending: false })
+          .range(from, to)
+      );
+      logs.push(...chunkLogs);
+    }
+  } catch (err) {
+    addToast('재고 변동 로그 조회 실패: ' + err.message);
+    return;
+  }
 
   // Map reasons: serial -> latest reason
   const reasonMap = {};
@@ -853,13 +880,27 @@ async function exportSelloStock() {
   
   if (confirm(`다운로드한 ${queueItems.length}개 항목을 '처리 완료'로 표시할까요?\n(대기열에서 제외됩니다)`)) {
     const ids = queueItems.map(item => item.id);
-    const { error: updateError } = await supabase
-      .from('sello_upload_queue')
-      .update({ status: 'SUCCESS' })
-      .in('id', ids);
+    addToast('상태 업데이트 중...');
     
-    if (updateError) {
-      addToast('상태 업데이트 실패: ' + updateError.message);
+    let success = true;
+    let updateErrorMsg = '';
+    
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+      const chunkIds = ids.slice(i, i + CHUNK_SIZE);
+      const { error: updateError } = await supabase
+        .from('sello_upload_queue')
+        .update({ status: 'SUCCESS' })
+        .in('id', chunkIds);
+        
+      if (updateError) {
+        success = false;
+        updateErrorMsg = updateError.message;
+        break;
+      }
+    }
+    
+    if (!success) {
+      addToast('상태 업데이트 실패: ' + updateErrorMsg);
     } else {
       addToast('상태 업데이트 완료');
       updatePendingSelloCount();
