@@ -1449,31 +1449,40 @@ async function handleGlobalPaste(e) {
    
    if (!selStart.value || !selEnd.value) return;
    const rMin = Math.min(selStart.value.r, selEnd.value.r);
+   const rMax = Math.max(selStart.value.r, selEnd.value.r);
    const cMin = Math.min(selStart.value.c, selEnd.value.c);
+   const cMax = Math.max(selStart.value.c, selEnd.value.c);
    
-   const lines = text.split(/\r?\n/).map(row => row.split('\t'));
+   let lines = text.split(/\r?\n/).map(row => row.split('\t'));
+   // Excel이나 웹 클립보드 복사 시 끝에 생기는 개행 줄 제거 처리
+   if (lines.length > 1 && lines[lines.length - 1].length === 1 && lines[lines.length - 1][0] === '') {
+     lines.pop();
+   }
+   
    const itemsOnly = itemsOnlyGrid.value;
    const promises = [];
    const batchChanges = [];
    let updateCount = 0;
    
-   for (let i = 0; i < lines.length; i++) {
-      const tr = rMin + i;
-      if (tr >= itemsOnly.length) break;
-      const product = itemsOnly[tr].product;
-      const updates = {};
-      let changed = false;
-      
-      for (let j = 0; j < lines[i].length; j++) {
-         const tc = cMin + j;
+   // 단일 셀 값을 복사했는지 판정 (1x1 셀)
+   const isSingleValue = (lines.length === 1 && lines[0].length === 1);
+   
+   if (isSingleValue) {
+     const valToCopy = lines[0][0];
+     
+     // 선택한 드래그 범위 전체에 복사한 단일 값 복제 반영
+     for (let tr = rMin; tr <= rMax; tr++) {
+       if (tr >= itemsOnly.length) break;
+       const product = itemsOnly[tr].product;
+       const updates = {};
+       let changed = false;
+       
+       for (let tc = cMin; tc <= cMax; tc++) {
          if (tc >= visibleColsKeys.value.length) break;
          const key = visibleColsKeys.value[tc];
-         
-         // Can't edit updated_at directly via paste
          if (key === 'updated_at') continue;
          
-         let val = lines[i][j];
-         
+         let val = valToCopy;
          if (defaultCols[key].type === 'number') {
            val = Number(val) || 0;
          } else if (key === 'is_hidden') {
@@ -1487,22 +1496,70 @@ async function handleGlobalPaste(e) {
              oldValue: product[key],
              oldUpdatedAt: product.updated_at 
            });
-           product[key] = val; // Optimistic logic
+           product[key] = val; // 화면 즉시(낙관적) 반영
            updates[key] = val;
            changed = true;
          }
-      }
-      
-      if (changed) {
-        updates.updated_at = new Date().toISOString();
-        promises.push(supabase.from('products').update(updates).eq('id', product.id));
-        updateCount++;
+       }
+       
+       if (changed) {
+         updates.updated_at = new Date().toISOString();
+         promises.push(supabase.from('products').update(updates).eq('id', product.id));
+         updateCount++;
+         
+         const changedKeys = Object.keys(updates).filter(k => k !== 'updated_at');
+         if (changedKeys.some(k => k !== 'quantity')) {
+           markModified(product.id);
+         }
+       }
+     }
+   } else {
+     // 여러 셀 데이터를 한 묶음으로 복사해온 경우 (기존 표준 매칭 붙여넣기)
+     for (let i = 0; i < lines.length; i++) {
+        const tr = rMin + i;
+        if (tr >= itemsOnly.length) break;
+        const product = itemsOnly[tr].product;
+        const updates = {};
+        let changed = false;
         
-        const changedKeys = Object.keys(updates).filter(k => k !== 'updated_at');
-        if (changedKeys.some(k => k !== 'quantity')) {
-          markModified(product.id);
+        for (let j = 0; j < lines[i].length; j++) {
+           const tc = cMin + j;
+           if (tc >= visibleColsKeys.value.length) break;
+           const key = visibleColsKeys.value[tc];
+           
+           if (key === 'updated_at') continue;
+           
+           let val = lines[i][j];
+           if (defaultCols[key].type === 'number') {
+             val = Number(val) || 0;
+           } else if (key === 'is_hidden') {
+             val = (val === 'true' || val === '숨김' || val === '1');
+           }
+           
+           if (product[key] !== val) {
+             batchChanges.push({ 
+               id: product.id, 
+               field: key, 
+               oldValue: product[key],
+               oldUpdatedAt: product.updated_at 
+             });
+             product[key] = val;
+             updates[key] = val;
+             changed = true;
+           }
         }
-      }
+        
+        if (changed) {
+          updates.updated_at = new Date().toISOString();
+          promises.push(supabase.from('products').update(updates).eq('id', product.id));
+          updateCount++;
+          
+          const changedKeys = Object.keys(updates).filter(k => k !== 'updated_at');
+          if (changedKeys.some(k => k !== 'quantity')) {
+            markModified(product.id);
+          }
+        }
+     }
    }
    
    if (updateCount > 0) {
