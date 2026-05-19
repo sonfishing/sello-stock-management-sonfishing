@@ -1,4 +1,31 @@
 <template>
+  <!-- Left Off-canvas Menu (Main Navigation) -->
+  <div class="left-off-canvas-menu" :class="{ 'active': showLeftMenu }">
+    <div class="left-menu-inner">
+      <div class="left-menu-header">
+        <h2>메뉴</h2>
+        <button class="close-left-menu-btn" @click="showLeftMenu = false">&times;</button>
+      </div>
+      <nav class="left-nav-links">
+        <a href="index.html" class="nav-link">
+          <span class="icon">📦</span>재고
+        </a>
+        <a href="0stock.html" class="nav-link">
+          <span class="icon">🚫</span>품절
+        </a>
+        <a href="getstock.html" class="nav-link">
+          <span class="icon">📥</span>입고
+        </a>
+        <a href="outstock.html" class="nav-link">
+          <span class="icon">📤</span>출고
+        </a>
+        <a href="todolist.html" class="nav-link">
+          <span class="icon">📝</span>메모장
+        </a>
+      </nav>
+    </div>
+  </div>
+
   <!-- Top Off-canvas Menu (Settings/Columns) -->
   <div class="off-canvas-menu" :class="{ 'active': showOffCanvas }">
     <div class="menu-inner">
@@ -51,10 +78,13 @@
 
   <!-- Add Product Off-canvas Menu (REMOVED) -->
 
-  <div class="main-layout" :class="{ 'dimmed': showOffCanvas || showUploadModal || showSelloUploadModal || showDownloadModal }">
+  <div class="main-layout" :class="{ 'dimmed': showOffCanvas || showUploadModal || showSelloUploadModal || showDownloadModal || showLeftMenu }">
     <!-- Top Bar -->
     <header class="top-bar">
       <div class="left-actions">
+        <button class="menu-btn hamburger-btn" @click="showLeftMenu = !showLeftMenu">
+          <span class="icon">☰</span>
+        </button>
         <button class="menu-btn" @click="showOffCanvas = !showOffCanvas">
           <span class="icon">⚙️</span><span class="btn-label"> 설정</span>
         </button>
@@ -338,6 +368,7 @@ import "./App.css";
 const currentView = ref("list");
 const isGroupView = ref(true);
 const toastMessages = ref([]);
+const showLeftMenu = ref(false);
 const showOffCanvas = ref(false);
 const showUploadModal = ref(false);
 const showSelloUploadModal = ref(false);
@@ -556,16 +587,19 @@ const modifiedIds = ref(new Set(
 
 function markModified(id) {
   modifiedIds.value.add(id);
+  modifiedIds.value = new Set(modifiedIds.value); // Trigger Vue reactivity
   localStorage.setItem(MODIFIED_KEY, JSON.stringify([...modifiedIds.value]));
 }
 
 function clearModified() {
   modifiedIds.value.clear();
+  modifiedIds.value = new Set(); // Trigger Vue reactivity
   localStorage.removeItem(MODIFIED_KEY);
 }
 
 function unmarkModified(id) {
   modifiedIds.value.delete(id);
+  modifiedIds.value = new Set(modifiedIds.value); // Trigger Vue reactivity
   localStorage.setItem(MODIFIED_KEY, JSON.stringify([...modifiedIds.value]));
 }
 
@@ -577,16 +611,19 @@ const newEntriesIds = ref(new Set(
 
 function markAsNew(id) {
   newEntriesIds.value.add(id);
+  newEntriesIds.value = new Set(newEntriesIds.value); // Trigger Vue reactivity
   localStorage.setItem(NEW_ENTRIES_KEY, JSON.stringify([...newEntriesIds.value]));
 }
 
 function unmarkNew(id) {
   newEntriesIds.value.delete(id);
+  newEntriesIds.value = new Set(newEntriesIds.value); // Trigger Vue reactivity
   localStorage.setItem(NEW_ENTRIES_KEY, JSON.stringify([...newEntriesIds.value]));
 }
 
 function clearNewEntries() {
   newEntriesIds.value.clear();
+  newEntriesIds.value = new Set(); // Trigger Vue reactivity
   localStorage.removeItem(NEW_ENTRIES_KEY);
 }
 
