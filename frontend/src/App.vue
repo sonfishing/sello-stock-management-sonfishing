@@ -135,7 +135,7 @@
 
           <!-- Table Wrapper -->
           <div class="table-container" v-if="activeTab">
-            <div class="table-wrapper">
+            <div class="table-wrapper" @scroll="onTableScroll">
               <table class="product-table" @dragstart.prevent>
                 <thead>
                   <tr>
@@ -683,7 +683,11 @@ async function doDownloadExcel() {
   let products = [];
   try {
     if (downloadMode.value === 'modified' && modifiedIds.value.size > 0) {
-      const ids = [...modifiedIds.value];
+      // 100% 안전하게 ID들을 숫자로 캐스팅하여 DB 타입 일치 처리 (Postgres bigint 대응)
+      const ids = [...modifiedIds.value]
+        .map(id => (typeof id === 'string' ? parseInt(id, 10) : id))
+        .filter(id => !isNaN(id) && id !== null && id !== undefined);
+
       products = await fetchAllProducts((from, to) =>
         supabase
           .from('products')
@@ -694,14 +698,26 @@ async function doDownloadExcel() {
           .range(from, to)
       );
     } else {
-      products = await fetchAllProducts((from, to) =>
-        supabase
+      // 현재 탭에 맞는 조건만 조회하도록 필터 적용 (현재 탭 다운로드 수정)
+      const tab = activeTab.value;
+      products = await fetchAllProducts((from, to) => {
+        let query = supabase
           .from('products')
           .select('*')
           .eq('is_deleted', false)
           .order('manage_code', { ascending: true })
-          .range(from, to)
-      );
+          .range(from, to);
+
+        if (tab === '🔍 검색') {
+          const term = `%${searchQuery.value.trim()}%`;
+          query = query.or(`manage_code.ilike.${term},manage_name.ilike.${term}`);
+        } else if (tab === '#') {
+          query = query.or('manage_code.is.null,manage_code.eq.,manage_code.like.0%,manage_code.like.1%,manage_code.like.2%,manage_code.like.3%,manage_code.like.4%,manage_code.like.5%,manage_code.like.6%,manage_code.like.7%,manage_code.like.8%,manage_code.like.9%,manage_code.like.[%,manage_code.like.(%,manage_code.like.-%');
+        } else if (tab) {
+          query = query.ilike('manage_code', `${tab}%`);
+        }
+        return query;
+      });
     }
   } catch (err) {
     addToast('조회 실패: ' + err.message);
@@ -1045,17 +1061,36 @@ function allTabs() {
 }
 
 const searchQuery = ref('');
+const hasMoreData = ref({}); // 각 탭별로 추가로 불러올 데이터가 더 있는지 여부
 
-async function loadTab(tab, forceSearch = false) {
+// 테이블 스크롤 핸들러 (무한 스크롤)
+function onTableScroll(e) {
+  const el = e.target;
+  // 바닥에서 100px 이내로 스크롤되면 다음 페이지 로딩
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) {
+    const tab = activeTab.value;
+    if (tab && !loadingTabs.value.has(tab) && hasMoreData.value[tab] !== false) {
+      loadTab(tab, false, true);
+    }
+  }
+}
+
+async function loadTab(tab, forceSearch = false, loadMore = false) {
   if (tab === '🔍 검색' && !forceSearch) {
     if (!tabProducts.value[tab]) tabProducts.value[tab] = [];
     return;
   }
-  if (!forceSearch && (tabProducts.value[tab] || loadingTabs.value.has(tab))) return;
+  
+  // 이미 로딩 중이거나 더 이상 데이터가 없는 경우 차단
+  if (!forceSearch && !loadMore && (tabProducts.value[tab] || loadingTabs.value.has(tab))) return;
+  if (loadMore && (loadingTabs.value.has(tab) || hasMoreData.value[tab] === false)) return;
+  
   loadingTabs.value.add(tab);
   
-  selStart.value = null; // reset selection
-  selEnd.value = null;
+  if (!loadMore) {
+    selStart.value = null; // 선택 영역 초기화
+    selEnd.value = null;
+  }
 
   try {
     let query = supabase
@@ -1073,19 +1108,41 @@ async function loadTab(tab, forceSearch = false) {
        query = query.ilike('manage_code', `${tab}%`);
     }
     
+    const offset = loadMore ? (tabProducts.value[tab]?.length || 0) : 0;
+    const limit = 1000;
+    
+    // Supabase 1000개 단위 페이징 쿼리 범위 적용
+    query = query.range(offset, offset + limit - 1);
+    
     const { data, error } = await query;
     if (error) throw error;
     
-    // 자연 정렬 (Natural Sort): 알파벳과 숫자를 분리하여 숫자 크기대로 정렬 (1, 2, 10, 11...)
-    if (data) {
-      data.sort((a, b) => {
-        const codeA = (a.manage_code || '').trim();
-        const codeB = (b.manage_code || '').trim();
-        return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
-      });
+    // 불러온 데이터 수가 limit보다 적다면 마지막 데이터라고 간주
+    if (!data || data.length < limit) {
+      hasMoreData.value[tab] = false;
+    } else {
+      hasMoreData.value[tab] = true;
     }
     
-    tabProducts.value[tab] = data;
+    let combined = [];
+    if (loadMore) {
+      combined = [...(tabProducts.value[tab] || []), ...(data || [])];
+    } else {
+      combined = data || [];
+    }
+    
+    // 자연 정렬 (Natural Sort): 알파벳과 숫자를 분리하여 숫자 크기대로 정렬 (1, 2, 10, 11...)
+    combined.sort((a, b) => {
+      const codeA = (a.manage_code || '').trim();
+      const codeB = (b.manage_code || '').trim();
+      return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+    
+    tabProducts.value[tab] = combined;
+    
+    if (loadMore && data && data.length > 0) {
+      addToast(`추가 데이터 ${data.length}개 로드 완료`);
+    }
   } finally {
     loadingTabs.value.delete(tab);
   }
