@@ -42,6 +42,7 @@
           </button>
           <button class="menu-action-btn download-new-btn" @click="downloadNewProducts(); showOffCanvas = false;">
             <span class="icon">✨</span> 신규상품 다운로드
+            <span v-if="newEntriesIds.size > 0" class="modified-badge-inline">{{ newEntriesIds.size }}</span>
           </button>
         </div>
       </div>
@@ -192,7 +193,7 @@
                                   @click.stop="quickAddRow(row.product)">
                             +
                           </button>
-                          <span v-if="!row.product.serial_number" class="new-badge">NEW</span>
+                          <span v-if="newEntriesIds.has(row.product.id)" class="new-badge">NEW</span>
                           <span v-else-if="modifiedIds.has(row.product.id)" class="update-badge">UPDATE</span>
                         </div>
                       </td>
@@ -351,9 +352,16 @@
           🗑️ 수정 내역 초기화 ({{ modifiedIds.size }}개)
         </button>
       </div>
+      <div class="modal-section" v-if="newEntriesIds.size > 0">
+        <button class="btn-clear-modified" style="background:#f0f0f0;" @click="clearNewEntries(); addToast('신규상품 표시가 초기화되었습니다.');">
+          🗑️ 신규상품 표시 지우기 ({{ newEntriesIds.size }}개)
+        </button>
+      </div>
 
       <div class="modal-actions">
-        <button class="download-new-btn-modal" style="margin-right: auto;" @click="downloadNewProducts(); showDownloadModal = false;">✨ 신규상품 다운로드</button>
+        <button class="download-new-btn-modal" style="margin-right: auto;" @click="downloadNewProducts(); showDownloadModal = false;">
+          ✨ 신규상품 다운로드<span v-if="newEntriesIds.size > 0"> ({{ newEntriesIds.size }})</span>
+        </button>
         <button class="cancel-btn" @click="showDownloadModal = false">취소</button>
         <button class="submit-btn" @click="doDownloadExcel">📥 다운로드</button>
       </div>
