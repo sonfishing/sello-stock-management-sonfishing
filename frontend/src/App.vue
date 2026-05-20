@@ -192,7 +192,7 @@
                                   @click.stop="quickAddRow(row.product)">
                             +
                           </button>
-                          <span v-if="newEntriesIds.has(row.product.id) || !row.product.serial_number" class="new-badge">NEW</span>
+                          <span v-if="!row.product.serial_number" class="new-badge">NEW</span>
                           <span v-else-if="modifiedIds.has(row.product.id)" class="update-badge">UPDATE</span>
                         </div>
                       </td>
@@ -203,7 +203,7 @@
                           @dblclick="onDoubleClick(row.rIdx, cIdx)"
                           :class="{ 
                             'cell-selected': isSelected(row.rIdx, cIdx),
-                            'no-edit-cell': (key === 'serial_number' && row.product.serial_number) || key === 'updated_at'
+                            'no-edit-cell': (key === 'serial_number' && !newEntriesIds.has(row.product.id)) || key === 'updated_at'
                           }"
                           class="excel-cell">
                         
@@ -607,28 +607,45 @@ function unmarkModified(id) {
   localStorage.setItem(MODIFIED_KEY, JSON.stringify([...modifiedIds.value]));
 }
 
-// ─── New Session Entries Tracking (localStorage) ─────────────────────────────
+// ─── New Session Entries Tracking (cookie, 24h expiry) ─────────────────────
 const NEW_ENTRIES_KEY = 'newProductIds';
-const newEntriesIds = ref(new Set(
-  JSON.parse(localStorage.getItem(NEW_ENTRIES_KEY) || '[]')
-));
+const NEW_ENTRIES_EXPIRY = 24 * 60 * 60 * 1000; // 24h
+
+function readNewEntriesCookie() {
+  const raw = document.cookie
+    .split('; ')
+    .find(row => row.startsWith(NEW_ENTRIES_KEY + '='));
+  if (!raw) return [];
+  try {
+    return JSON.parse(decodeURIComponent(raw.split('=')[1]));
+  } catch {
+    return [];
+  }
+}
+
+function writeNewEntriesCookie(ids) {
+  const expires = new Date(Date.now() + NEW_ENTRIES_EXPIRY).toUTCString();
+  document.cookie = `${NEW_ENTRIES_KEY}=${encodeURIComponent(JSON.stringify([...ids]))}; expires=${expires}; path=/`;
+}
+
+const newEntriesIds = ref(new Set(readNewEntriesCookie()));
 
 function markAsNew(id) {
   newEntriesIds.value.add(id);
-  newEntriesIds.value = new Set(newEntriesIds.value); // Trigger Vue reactivity
-  localStorage.setItem(NEW_ENTRIES_KEY, JSON.stringify([...newEntriesIds.value]));
+  newEntriesIds.value = new Set(newEntriesIds.value);
+  writeNewEntriesCookie(newEntriesIds.value);
 }
 
 function unmarkNew(id) {
   newEntriesIds.value.delete(id);
-  newEntriesIds.value = new Set(newEntriesIds.value); // Trigger Vue reactivity
-  localStorage.setItem(NEW_ENTRIES_KEY, JSON.stringify([...newEntriesIds.value]));
+  newEntriesIds.value = new Set(newEntriesIds.value);
+  writeNewEntriesCookie(newEntriesIds.value);
 }
 
 function clearNewEntries() {
   newEntriesIds.value.clear();
-  newEntriesIds.value = new Set(); // Trigger Vue reactivity
-  localStorage.removeItem(NEW_ENTRIES_KEY);
+  newEntriesIds.value = new Set();
+  document.cookie = `${NEW_ENTRIES_KEY}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/`;
 }
 
 // ─── Excel Download Modal ─────────────────────────────────────────────────────
@@ -1388,8 +1405,8 @@ function onDoubleClick(r, c) {
   const key = visibleColsKeys.value[c];
   if (key === 'serial_number') {
     const product = itemsOnlyGrid.value[r]?.product;
-    if (product && product.serial_number !== null && product.serial_number !== undefined && String(product.serial_number).trim() !== '') {
-      addToast('일련번호는 수동으로 수정할 수 없습니다. (엑셀 업로드 이용)');
+    if (product && !newEntriesIds.value.has(product.id)) {
+      addToast('일련번호는 신규 등록 후 24시간 이내에만 수정할 수 있습니다.');
       return;
     }
   }
@@ -1678,13 +1695,23 @@ async function handleGlobalPaste(e) {
      }
    }
    
-   if (updateCount > 0) {
-     pushToUndo(batchChanges);
-     addToast(`${updateCount}개 데이터 반영 중...`);
-     await Promise.all(promises);
-     addToast('붙여넣기 반영 완료');
-     updatePendingSelloCount();
-   }
+if (updateCount > 0) {
+      pushToUndo(batchChanges);
+      addToast(`${updateCount}개 데이터 반영 중...`);
+      await Promise.all(promises);
+      addToast('붙여넣기 반영 완료');
+      updatePendingSelloCount();
+      // serial_number가 포함된 붙여넣기인 경우 newEntriesIds에 등록
+      const pastedIds = new Set(
+        batchChanges.filter(ch => ch.field === 'serial_number' && ch.oldValue === null)
+          .map(ch => ch.id)
+      );
+      if (pastedIds.size > 0) {
+        pastedIds.forEach(id => newEntriesIds.value.add(id));
+        newEntriesIds.value = new Set(newEntriesIds.value);
+        writeNewEntriesCookie(newEntriesIds.value);
+      }
+    }
 }
 
 function closeAndSave(product, key, newVal) {
@@ -1746,6 +1773,9 @@ async function updateField(id, field, value) {
   } else {
     if (field !== 'quantity') {
       markModified(id);
+    }
+    if (field === 'serial_number' && value) {
+      markAsNew(id);
     }
     pushToUndo([{ id, field, oldValue, oldUpdatedAt }]);
     if (active && tabProducts.value[active]) {
