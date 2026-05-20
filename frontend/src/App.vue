@@ -40,6 +40,9 @@
             <span class="icon">📥</span> 다운로드
             <span v-if="modifiedIds.size > 0" class="modified-badge-inline">{{ modifiedIds.size }}</span>
           </button>
+          <button class="menu-action-btn download-new-btn" @click="downloadNewProducts(); showOffCanvas = false;">
+            <span class="icon">✨</span> 신규상품 다운로드
+          </button>
         </div>
       </div>
 
@@ -189,7 +192,7 @@
                                   @click.stop="quickAddRow(row.product)">
                             +
                           </button>
-                          <span v-if="newEntriesIds.has(row.product.id)" class="new-badge">NEW</span>
+                          <span v-if="newEntriesIds.has(row.product.id) || !row.product.serial_number" class="new-badge">NEW</span>
                           <span v-else-if="modifiedIds.has(row.product.id)" class="update-badge">UPDATE</span>
                         </div>
                       </td>
@@ -200,7 +203,7 @@
                           @dblclick="onDoubleClick(row.rIdx, cIdx)"
                           :class="{ 
                             'cell-selected': isSelected(row.rIdx, cIdx),
-                            'no-edit-cell': key === 'serial_number' || key === 'updated_at'
+                            'no-edit-cell': (key === 'serial_number' && row.product.serial_number) || key === 'updated_at'
                           }"
                           class="excel-cell">
                         
@@ -350,6 +353,7 @@
       </div>
 
       <div class="modal-actions">
+        <button class="download-new-btn-modal" style="margin-right: auto;" @click="downloadNewProducts(); showDownloadModal = false;">✨ 신규상품 다운로드</button>
         <button class="cancel-btn" @click="showDownloadModal = false">취소</button>
         <button class="submit-btn" @click="doDownloadExcel">📥 다운로드</button>
       </div>
@@ -786,13 +790,18 @@ async function exportSelloStock() {
     return;
   }
 
+  // Filter out any items that do not have a valid serial_number (since they cannot be matched in Sello stock registration)
+  queueItems = queueItems.filter(
+    item => item.serial_number !== null && item.serial_number !== undefined && String(item.serial_number).trim() !== ''
+  );
+
   if (!queueItems || queueItems.length === 0) {
-    addToast('보낼 재고 데이터가 없습니다.');
+    addToast('보낼 재고 데이터가 없습니다. (일련번호가 기입된 상품 대상)');
     return;
   }
 
   // 2. Fetch product names in chunks of 500 serials (Postgres & URL 길이 제한 방지)
-  const serials = [...new Set(queueItems.map(item => item.serial_number))];
+  const serials = [...new Set(queueItems.map(item => item.serial_number).filter(s => s != null && s !== ""))];
   const products = [];
   const CHUNK_SIZE = 500;
   
@@ -906,6 +915,69 @@ async function exportSelloStock() {
       updatePendingSelloCount();
     }
   }
+}
+
+async function downloadNewProducts() {
+  addToast('신규 상품 데이터 조회 중...');
+
+  let products = [];
+  try {
+    // 1. Fetch all products (is_deleted: false)
+    products = await fetchAllProducts((from, to) =>
+      supabase
+        .from('products')
+        .select('*')
+        .eq('is_deleted', false)
+        .order('manage_code', { ascending: true })
+        .range(from, to)
+    );
+  } catch (err) {
+    addToast('조회 실패: ' + err.message);
+    return;
+  }
+
+  // 2. Filter to ONLY products that do NOT have a serial_number (null, undefined, or empty)
+  const newProducts = products.filter(
+    p => p.serial_number === null || p.serial_number === undefined || String(p.serial_number).trim() === ''
+  );
+
+  if (newProducts.length === 0) {
+    addToast('다운로드할 신규 상품이 없습니다.');
+    return;
+  }
+
+  // 자연 정렬 (Natural Sort)
+  newProducts.sort((a, b) => {
+    const codeA = (a.manage_code || '').trim();
+    const codeB = (b.manage_code || '').trim();
+    return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+  });
+
+  // 3. Build CSV using ALL columns from defaultCols
+  const allKeys = Object.keys(defaultCols);
+  const headersRow = allKeys.map(k => `"${defaultCols[k].label.replace(/"/g, '""')}"`).join(',');
+  const rows = newProducts.map(p =>
+    allKeys.map(k => {
+      const val = p[k];
+      if (val === null || val === undefined) return '';
+      if (k === 'is_hidden') return val ? '숨김' : '노출';
+      if (k === 'updated_at') return formatDate(val);
+      return String(val).replace(/"/g, '""');
+    }).map(v => `"${v}"`).join(',')
+  );
+  const csvContent = '\uFEFF' + [headersRow, ...rows].join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+  
+  a.href = url;
+  a.download = `신규상품_${ts}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  addToast(`다운로드 완료 (${newProducts.length}개)`);
 }
 
 async function quickAddRow(source) {
@@ -1315,8 +1387,11 @@ function onMouseEnter(r, c) {
 function onDoubleClick(r, c) {
   const key = visibleColsKeys.value[c];
   if (key === 'serial_number') {
-    addToast('일련번호는 수동으로 수정할 수 없습니다. (엑셀 업로드 이용)');
-    return;
+    const product = itemsOnlyGrid.value[r]?.product;
+    if (product && product.serial_number !== null && product.serial_number !== undefined && String(product.serial_number).trim() !== '') {
+      addToast('일련번호는 수동으로 수정할 수 없습니다. (엑셀 업로드 이용)');
+      return;
+    }
   }
   editingCell.value = { r, c };
   nextTick(() => {

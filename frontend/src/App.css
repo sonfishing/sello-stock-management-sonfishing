@@ -965,3 +965,46 @@ select.full-input.edit-active {
   .status-badge { display: none; }
   .sidebar-toggle-btn .btn-label { display: none; }
 }
+
+/* New Product Download Premium Buttons Styling */
+.download-new-btn {
+  flex: 1;
+  padding: 16px;
+  background: #E6FFFA;
+  color: #0D9488;
+  border: 2px solid #0D9488;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.1);
+}
+.download-new-btn:hover {
+  background: #CCFBF1;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(13, 148, 136, 0.2);
+}
+
+.download-new-btn-modal {
+  padding: 12px 20px;
+  background: #E6FFFA;
+  color: #0D9488;
+  border: 2px solid #0D9488;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+.download-new-btn-modal:hover {
+  background: #CCFBF1;
+  transform: translateY(-1px);
+}
