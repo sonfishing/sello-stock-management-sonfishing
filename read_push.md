@@ -45,13 +45,32 @@ git push
 
 ## 배포 (Cloudflare Pages)
 
-로컬에 Cloudflare Pages 설정 파일은 없으며, 현재는 `frontend/dist/` 폴더를 Cloudflare Pages 대시보드에 직접 업로드하여 배포하는 것으로 보입니다.
+이 저장소는 **GitHub와 Cloudflare Pages가 Git 연동**되어 있어, `main` 브랜치에 푸시하면 Cloudflare Pages가 자동으로 빌드(`cd frontend && npm run build`) 후 배포합니다.
 
-**배포 방법 (수동)**:
+**로컬에서 할 일은 Git 푸시까지**:
 ```powershell
+git add -A
+git commit -m "변경사항 설명"
+git push
+```
+
+> 푸시 후 Cloudflare Pages 대시보드(https://dash.cloudflare.com)에서 배포 상태를 확인할 수 있습니다.
+>
+> Cloudflare Pages 빌드 설정:
+> - **루트 디렉토리**: `/frontend`
+> - **빌드 명령어**: `npm run build`
+> - **배포 디렉토리**: `dist`
+> - **환경변수**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (대시보드에 별도 설정)
+
+---
+
+## wrangler CLI로 배포 (대체 방법)
+
+로컬에 wrangler가 설치되어 있지 않으므로 사용 전 설치 필요:
+```powershell
+npm install -g wrangler
+wrangler login
 cd frontend
 npm run build
+wrangler pages deploy dist --branch main
 ```
-→ 생성된 `frontend/dist/` 폴더를 Cloudflare Pages 대시보드에 업로드
-
-> 참고: .env의 Supabase 키는 Cloudflare Pages 환경변수에도 별도로 설정되어 있음 (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
