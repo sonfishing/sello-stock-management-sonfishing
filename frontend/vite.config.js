@@ -11,7 +11,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
-        zerostock: resolve(__dirname, '0stock.html')
+        zerostock: resolve(__dirname, '0stock.html'),
+        sscodestock: resolve(__dirname, 'ss_code_stock.html')
       }
     }
   }
