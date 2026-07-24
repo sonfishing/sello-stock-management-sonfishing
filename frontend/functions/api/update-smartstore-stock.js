@@ -44,8 +44,8 @@ async function updateNaverStock(token, product, newStockQuantity) {
     url = `https://api.commerce.naver.com/external/v1/products/${originProductNo}/options/${optionId}/stock`
     body = { stockQuantity: newStockQuantity }
   } else if (category === '추가옵션') {
-    if (!originProductNo || !productId) throw new Error('추가옵션: origin_product_no, product_id 필요')
-    url = `https://api.commerce.naver.com/external/v1/products/${originProductNo}/supplement-products/${productId}/stock`
+    if (!originProductNo || !optionId) throw new Error('추가옵션: origin_product_no, option_id 필요')
+    url = `https://api.commerce.naver.com/external/v1/products/${originProductNo}/supplement-products/${optionId}/stock`
     body = { stockQuantity: newStockQuantity }
   } else if (category === '원상품') {
     if (!originProductNo) throw new Error('원상품: origin_product_no 필요')
