@@ -35,7 +35,6 @@ async function updateNaverStock(token, product, newStockQuantity) {
   const category = product.category || ''
   const originProductNo = product.origin_product_no
   const optionId = product.option_id
-  const productId = product.product_id
 
   let url, body
 
@@ -92,21 +91,36 @@ export async function onRequest(context) {
     })
   }
 
-  const clientId = env.CLIENT_ID
-  const clientSecret = env.CLIENT_SECRET
-  if (!clientId || !clientSecret) {
-    return new Response(JSON.stringify({ success: false, message: 'CLIENT_ID / CLIENT_SECRET 환경변수가 설정되지 않았습니다.' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-    })
-  }
-
   try {
     const { product, newStockQuantity } = await request.json()
 
     if (!product || newStockQuantity === undefined) {
       return new Response(JSON.stringify({ success: false, message: '필수 파라미터 누락' }), {
         status: 400,
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+      })
+    }
+
+    // RELAY_SERVER_URL이 설정되어 있으면 Python relay 서버로 포워딩
+    if (env.RELAY_SERVER_URL) {
+      const relayRes = await fetch(env.RELAY_SERVER_URL + '/update-stock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product, newStockQuantity })
+      })
+      const result = await relayRes.json()
+      return new Response(JSON.stringify(result), {
+        status: relayRes.ok ? 200 : 500,
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+      })
+    }
+
+    // RELAY_SERVER_URL이 없으면 Cloudflare에서 직접 Naver API 호출
+    const clientId = env.CLIENT_ID
+    const clientSecret = env.CLIENT_SECRET
+    if (!clientId || !clientSecret) {
+      return new Response(JSON.stringify({ success: false, message: 'CLIENT_ID / CLIENT_SECRET 환경변수가 설정되지 않았습니다.' }), {
+        status: 500,
         headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       })
     }
