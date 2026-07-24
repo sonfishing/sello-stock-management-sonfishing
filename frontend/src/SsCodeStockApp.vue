@@ -74,10 +74,11 @@
             <table class="product-table">
               <thead>
                 <tr>
-                  <th>name</th>
-                  <th>category</th>
-                  <th style="text-align: center;">stock_quantity</th>
-                  <th>status</th>
+                  <th style="width: 38%;">name</th>
+                  <th style="width: 17%;">category</th>
+                  <th style="width: 12%; text-align: center;">stock_quantity</th>
+                  <th style="width: 15%;">status</th>
+                  <th style="width: 18%;">관리</th>
                 </tr>
               </thead>
               <tbody>
@@ -89,10 +90,26 @@
                     <div class="padding-cell">{{ product.category || '-' }}</div>
                   </td>
                   <td style="text-align: center;">
-                    <div class="padding-cell font-mono">{{ product.stock_quantity ?? '-' }}</div>
+                    <div class="padding-cell">
+                      <input
+                        type="number"
+                        class="qty-input"
+                        :value="editQuantities[product.id] ?? product.stock_quantity ?? 0"
+                        @input="onQtyInput(product.id, $event)"
+                      />
+                    </div>
                   </td>
                   <td>
                     <div class="padding-cell">{{ product.status || '-' }}</div>
+                  </td>
+                  <td style="text-align: center;">
+                    <button
+                      class="update-btn"
+                      :disabled="updating.has(product.id)"
+                      @click="updateStock(product)"
+                    >
+                      {{ updating.has(product.id) ? '처리중...' : '재고 수정' }}
+                    </button>
                   </td>
                 </tr>
               </tbody>
@@ -117,7 +134,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import { supabase } from './supabaseClient'
 
 const showLeftMenu = ref(false)
@@ -126,6 +143,18 @@ const products = ref([])
 const loading = ref(false)
 const error = ref('')
 const searched = ref(false)
+const editQuantities = reactive({})
+const updating = ref(new Set())
+const toastMessage = ref('')
+
+function showToast(msg) {
+  toastMessage.value = msg
+  setTimeout(() => { toastMessage.value = '' }, 3000)
+}
+
+function onQtyInput(id, event) {
+  editQuantities[id] = parseInt(event.target.value, 10) || 0
+}
 
 async function searchProducts() {
   const query = searchQuery.value.trim()
@@ -143,11 +172,53 @@ async function searchProducts() {
 
     if (err) throw err
     products.value = data || []
+    products.value.forEach(p => { editQuantities[p.id] = p.stock_quantity ?? 0 })
   } catch (e) {
     error.value = '조회 실패: ' + e.message
     products.value = []
   } finally {
     loading.value = false
+  }
+}
+
+async function updateStock(product) {
+  const newQty = editQuantities[product.id]
+  if (newQty === undefined || newQty === product.stock_quantity) {
+    showToast('변경된 수량이 없습니다.')
+    return
+  }
+
+  const id = product.id
+  updating.value = new Set([...updating.value, id])
+
+  try {
+    const { error: dbError } = await supabase
+      .from('smartstore_products')
+      .update({ stock_quantity: newQty })
+      .eq('id', id)
+
+    if (dbError) throw new Error('DB 업데이트 실패: ' + dbError.message)
+
+    const res = await fetch('/api/update-smartstore-stock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product, newStockQuantity: newQty })
+    })
+
+    const result = await res.json()
+
+    if (!result.success) {
+      showToast('스마트스토어 업데이트 실패: ' + (result.message || '알 수 없는 오류'))
+    } else {
+      product.stock_quantity = newQty
+      showToast('재고가 수정되었습니다.')
+    }
+  } catch (e) {
+    showToast('오류: ' + e.message)
+  } finally {
+    const s = new Set(updating.value)
+    s.delete(id)
+    updating.value = s
   }
 }
 </script>
@@ -191,6 +262,43 @@ async function searchProducts() {
   background-color: #F8FAFC;
 }
 
+.qty-input {
+  width: 80px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  text-align: center;
+  outline: none;
+  background: var(--surface);
+  color: var(--text-primary);
+  transition: border-color 0.2s ease;
+}
+.qty-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(27, 100, 218, 0.15);
+}
+
+.update-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary, #1B64DA);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+.update-btn:hover:not(:disabled) {
+  background: #1552b3;
+}
+.update-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .zero-stock-footer {
   display: flex;
   justify-content: flex-end;
@@ -218,7 +326,17 @@ async function searchProducts() {
   font-size: 18px;
 }
 
-.font-mono {
-  font-family: 'Consolas', 'Courier New', monospace;
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  color: #fff;
+  padding: 10px 24px;
+  border-radius: 10px;
+  font-size: 14px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 </style>
