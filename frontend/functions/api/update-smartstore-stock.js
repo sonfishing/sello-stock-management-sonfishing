@@ -72,13 +72,23 @@ async function updateNaverStock(token, product, newStockQuantity) {
   return await res.json()
 }
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type'
+}
+
 export async function onRequest(context) {
   const { request, env } = context
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS_HEADERS })
+  }
 
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ success: false, message: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
     })
   }
 
@@ -87,7 +97,7 @@ export async function onRequest(context) {
   if (!clientId || !clientSecret) {
     return new Response(JSON.stringify({ success: false, message: 'CLIENT_ID / CLIENT_SECRET 환경변수가 설정되지 않았습니다.' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
     })
   }
 
@@ -97,7 +107,7 @@ export async function onRequest(context) {
     if (!product || newStockQuantity === undefined) {
       return new Response(JSON.stringify({ success: false, message: '필수 파라미터 누락' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       })
     }
 
@@ -106,12 +116,12 @@ export async function onRequest(context) {
 
     return new Response(JSON.stringify({ success: true, data: result }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
     })
   } catch (e) {
     return new Response(JSON.stringify({ success: false, message: e.message }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
     })
   }
 }

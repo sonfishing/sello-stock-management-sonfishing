@@ -131,6 +131,8 @@
       </div>
     </div>
   </div>
+
+  <div v-if="toastMessage" class="toast">{{ toastMessage }}</div>
 </template>
 
 <script setup>
