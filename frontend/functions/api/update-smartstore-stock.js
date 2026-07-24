@@ -32,23 +32,27 @@ async function getAccessToken(clientId, clientSecret) {
 }
 
 async function updateNaverStock(token, product, newStockQuantity) {
+  const category = product.category || ''
   const originProductNo = product.origin_product_no
   const optionId = product.option_id
   const productId = product.product_id
 
   let url, body
 
-  if (optionId && originProductNo) {
+  if (category === '일반옵션') {
+    if (!originProductNo || !optionId) throw new Error('일반옵션: origin_product_no, option_id 필요')
     url = `https://api.commerce.naver.com/external/v1/products/${originProductNo}/options/${optionId}/stock`
     body = { stockQuantity: newStockQuantity }
-  } else if (originProductNo && !optionId) {
+  } else if (category === '추가옵션') {
+    if (!originProductNo || !productId) throw new Error('추가옵션: origin_product_no, product_id 필요')
+    url = `https://api.commerce.naver.com/external/v1/products/${originProductNo}/supplement-products/${productId}/stock`
+    body = { stockQuantity: newStockQuantity }
+  } else if (category === '원상품') {
+    if (!originProductNo) throw new Error('원상품: origin_product_no 필요')
     url = `https://api.commerce.naver.com/external/v1/products/${originProductNo}/stock`
     body = { stockQuantity: newStockQuantity }
-  } else if (productId && !originProductNo) {
-    url = `https://api.commerce.naver.com/external/v1/products/${productId}/stock`
-    body = { stockQuantity: newStockQuantity }
   } else {
-    throw new Error('식별자 정보 부족 (origin_product_no, option_id, product_id)')
+    throw new Error(`알 수 없는 category: "${category}"`)
   }
 
   const res = await fetch(url, {
