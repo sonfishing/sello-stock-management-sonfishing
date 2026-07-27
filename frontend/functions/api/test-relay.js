@@ -1,5 +1,6 @@
 import { connect } from 'cloudflare:sockets'
 import bcrypt from 'bcryptjs'
+import forge from 'node-forge'
 
 const PROXY_HOST = 'sonfishing.iptime.org'
 const PROXY_PORT = 5800
@@ -12,76 +13,107 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type'
 }
 
-async function createTlsSocket() {
+async function tunneledRequest(method, path, headers, body) {
   const socket = connect({ hostname: PROXY_HOST, port: PROXY_PORT })
 
-  const writer = socket.writable.getWriter()
-  await writer.write(new TextEncoder().encode(
+  const sw = socket.writable.getWriter()
+  await sw.write(new TextEncoder().encode(
     `CONNECT ${NAVER_HOST}:${NAVER_PORT} HTTP/1.1\r\nHost: ${NAVER_HOST}:${NAVER_PORT}\r\n\r\n`
   ))
-  writer.releaseLock()
+  sw.releaseLock()
 
-  const reader = socket.readable.getReader()
+  const sr = socket.readable.getReader()
   let resp = ''
   while (true) {
-    const { value, done } = await reader.read()
+    const { value, done } = await sr.read()
     if (done) break
     resp += new TextDecoder().decode(value)
     if (resp.includes('\r\n\r\n')) break
   }
-  reader.releaseLock()
+  sr.releaseLock()
 
   if (!resp.includes('200 Connection established')) {
-    throw new Error('Proxy CONNECT failed: ' + resp)
+    socket.close()
+    throw new Error('CONNECT failed: ' + resp)
   }
 
-  return socket.startTls({ serverName: NAVER_HOST })
-}
+  // forge TLS over the tunnel
+  let plaintext = ''
+  let tlsReady = false
+  let pendingResolve = null
+  let pendingReject = null
 
-async function rawRequest(method, path, headers, body) {
-  const socket = await createTlsSocket()
-  try {
-    const writer = socket.writable.getWriter()
-    let req = `${method} ${path} HTTP/1.1\r\nHost: ${NAVER_HOST}\r\n`
-    for (const [k, v] of Object.entries(headers)) req += `${k}: ${v}\r\n`
-    if (body) req += `Content-Length: ${new TextEncoder().encode(body).length}\r\n`
-    req += '\r\n'
-    if (body) req += body
-
-    await writer.write(new TextEncoder().encode(req))
-    writer.releaseLock()
-
-    const reader = socket.readable.getReader()
-    let raw = ''
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      raw += new TextDecoder().decode(value, { stream: true })
-
-      const headerEnd = raw.indexOf('\r\n\r\n')
-      if (headerEnd !== -1) {
-        const hs = raw.substring(0, headerEnd)
-        const bodyStart = headerEnd + 4
-        const clMatch = hs.match(/Content-Length:\s*(\d+)/i)
-        if (clMatch) {
-          const cl = parseInt(clMatch[1])
-          if (raw.substring(bodyStart).length >= cl) break
-        } else if (/Transfer-Encoding:\s*chunked/i.test(hs)) {
-          if (raw.endsWith('0\r\n\r\n')) break
+  const tls = forge.tls.createConnection({
+    server: [],
+    verify: () => true,
+    connected: () => { tlsReady = true },
+    getData: (c, data) => {
+      plaintext += data.getBytes()
+      const hp = plaintext.indexOf('\r\n\r\n')
+      if (hp !== -1 && pendingResolve) {
+        const hs = plaintext.substring(0, hp)
+        const bs = hp + 4
+        const cm = hs.match(/Content-Length:\s*(\d+)/i)
+        if (cm) {
+          if (plaintext.substring(bs).length >= parseInt(cm[1])) {
+            const sc = parseInt(hs.split(' ')[1])
+            pendingResolve({ statusCode: sc, body: plaintext.substring(bs).trim() })
+            pendingResolve = null
+          }
         } else {
-          break
+          const sc = parseInt(hs.split(' ')[1])
+          pendingResolve({ statusCode: sc, body: plaintext.substring(bs).trim() })
+          pendingResolve = null
         }
       }
-    }
-    reader.releaseLock()
+    },
+    tlsDataReady: (c, data) => {
+      const w = socket.writable.getWriter()
+      w.write(new Uint8Array(data)).then(() => w.releaseLock())
+    },
+    closed: () => {
+      if (pendingResolve) {
+        pendingResolve({ statusCode: 0, body: plaintext })
+        pendingResolve = null
+      }
+    },
+    error: (c, error) => {
+      if (pendingReject) {
+        pendingReject(new Error(error.message))
+        pendingReject = null
+      }
+    },
+    getServerName: () => NAVER_HOST
+  })
 
-    const headerEnd = raw.indexOf('\r\n\r\n')
-    const statusLine = raw.substring(0, raw.indexOf('\r\n'))
-    const sc = parseInt(statusLine.split(' ')[1])
-    return { statusCode: sc, body: raw.substring(headerEnd + 4).trim() }
-  } finally {
-    await socket.close()
-  }
+  tls.handshake()
+
+  // Read from tunnel → forge
+  ;(async () => {
+    const r = socket.readable.getReader()
+    while (true) {
+      const { value, done } = await r.read()
+      if (done) break
+      tls.process(value)
+    }
+    r.releaseLock()
+  })()
+
+  // Build & send HTTP request
+  let req = `${method} ${path} HTTP/1.1\r\nHost: ${NAVER_HOST}\r\n`
+  for (const [k, v] of Object.entries(headers)) req += `${k}: ${v}\r\n`
+  if (body) req += `Content-Length: ${new TextEncoder().encode(body).length}\r\n`
+  req += '\r\n'
+  if (body) req += body
+
+  const result = await new Promise((resolve, reject) => {
+    pendingResolve = resolve
+    pendingReject = reject
+    tls.prepare(req)
+  })
+
+  socket.close()
+  return result
 }
 
 async function getAccessToken(clientId, clientSecret) {
@@ -96,7 +128,7 @@ async function getAccessToken(clientId, clientSecret) {
     grant_type: 'client_credentials', type: 'SELF'
   }).toString()
 
-  const res = await rawRequest('POST', '/external/v1/oauth2/token', {
+  const res = await tunneledRequest('POST', '/external/v1/oauth2/token', {
     'Content-Type': 'application/x-www-form-urlencoded',
     'Connection': 'close'
   }, body)
@@ -126,7 +158,7 @@ export async function onRequest(context) {
     const token = await getAccessToken(clientId, clientSecret)
 
     const searchBody = JSON.stringify({ page: 1, size: 10 })
-    const searchRes = await rawRequest('POST', '/external/v1/products/search', {
+    const searchRes = await tunneledRequest('POST', '/external/v1/products/search', {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
       'Connection': 'close'
