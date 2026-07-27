@@ -35,6 +35,9 @@
           <span class="icon">☰</span>
         </button>
         <h1 class="title">🏪 스마트스토어 재고변경</h1>
+        <button class="menu-btn test-btn" @click="testRelay" :disabled="testingRelay">
+          {{ testingRelay ? '조회 중...' : '📋 스마트스토어 상품 조회' }}
+        </button>
       </div>
       <div class="right-actions">
         <div class="search-box">
@@ -133,6 +136,10 @@
   </div>
 
   <div v-if="toastMessage" class="toast">{{ toastMessage }}</div>
+  <div v-if="testResult" class="test-result" :class="{ success: testResult.success, fail: !testResult.success }">
+    <strong>연결 테스트</strong><br>
+    {{ testResult.message }}
+  </div>
 </template>
 
 <script setup>
@@ -148,6 +155,8 @@ const searched = ref(false)
 const editQuantities = reactive({})
 const updating = ref(new Set())
 const toastMessage = ref('')
+const testingRelay = ref(false)
+const testResult = ref(null)
 
 function showToast(msg) {
   toastMessage.value = msg
@@ -221,6 +230,33 @@ async function updateStock(product) {
     const s = new Set(updating.value)
     s.delete(id)
     updating.value = s
+  }
+}
+
+async function testRelay() {
+  testingRelay.value = true
+  testResult.value = null
+  try {
+    const res = await fetch('/api/test-relay')
+    const data = await res.json()
+    if (data.success) {
+      const sample = data.data?.sample
+      let msg = `✅ 스마트스토어 API 연결 성공 (응답시간: ${data.elapsed})`
+      if (data.data?.totalCount !== undefined) {
+        msg += `\n📦 전체 상품 수: ${data.data.totalCount}개`
+      }
+      if (sample?.name) {
+        msg += `\n📌 샘플 상품: ${sample.name}`
+      }
+      testResult.value = { success: true, message: msg }
+    } else {
+      testResult.value = { success: false, message: `❌ API 조회 실패: ${data.message || data.data?.message}` }
+    }
+  } catch (e) {
+    testResult.value = { success: false, message: `❌ 요청 실패: ${e.message}` }
+  } finally {
+    testingRelay.value = false
+    setTimeout(() => { testResult.value = null }, 8000)
   }
 }
 </script>
@@ -340,5 +376,51 @@ async function updateStock(product) {
   font-size: 14px;
   z-index: 1000;
   box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.test-btn {
+  margin-left: 12px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #10b981;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  white-space: nowrap;
+}
+.test-btn:hover:not(:disabled) {
+  background: #059669;
+}
+.test-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.test-result {
+  position: fixed;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  max-width: 500px;
+  text-align: center;
+  line-height: 1.5;
+}
+.test-result.success {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #6ee7b7;
+}
+.test-result.fail {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
 }
 </style>

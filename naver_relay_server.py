@@ -81,6 +81,30 @@ def update_stock():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
+@app.route("/test-naver", methods=["GET"])
+def test_naver():
+    try:
+        token = get_access_token(CLIENT_ID, CLIENT_SECRET)
+
+        url = "https://api.commerce.naver.com/external/v2/products/origin-products"
+        headers = {"Authorization": f"Bearer {token}"}
+        params = {"page": 1, "pageSize": 1}
+
+        res = requests.get(url, headers=headers, params=params, timeout=15)
+        if res.status_code != 200:
+            raise Exception(f"상품 조회 실패: {res.status_code} - {res.text}")
+
+        data = res.json()
+        products = data.get("productList", [])
+        return jsonify({
+            "success": True,
+            "totalCount": data.get("totalCount", 0),
+            "sample": products[0] if products else None
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
