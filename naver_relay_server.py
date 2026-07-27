@@ -86,20 +86,36 @@ def test_naver():
     try:
         token = get_access_token(CLIENT_ID, CLIENT_SECRET)
 
-        url = "https://api.commerce.naver.com/external/v2/products/origin-products"
-        headers = {"Authorization": f"Bearer {token}"}
-        params = {"page": 1, "pageSize": 1}
+        url = "https://api.commerce.naver.com/external/v1/products/search"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        payload = {"page": 1, "size": 10}
 
-        res = requests.get(url, headers=headers, params=params, timeout=15)
+        res = requests.post(url, headers=headers, json=payload, timeout=15)
         if res.status_code != 200:
             raise Exception(f"상품 조회 실패: {res.status_code} - {res.text}")
 
         data = res.json()
-        products = data.get("productList", [])
+        products = data.get("contents", [])
+        sample = None
+        if products:
+            prod = products[0]
+            prod_id = prod.get("originProductNo")
+            prod_name = prod.get("name")
+            if not prod_name:
+                channels = prod.get("channelProducts", [])
+                if channels:
+                    prod_name = channels[0].get("name")
+            if not prod_name:
+                prod_name = prod.get("originProduct", {}).get("name")
+            sample = {"originProductNo": prod_id, "name": prod_name}
+
         return jsonify({
             "success": True,
-            "totalCount": data.get("totalCount", 0),
-            "sample": products[0] if products else None
+            "totalCount": len(products),
+            "sample": sample
         })
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
