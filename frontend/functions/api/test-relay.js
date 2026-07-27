@@ -23,30 +23,28 @@ async function tunneledRequest(method, path, headers, body) {
   sw.releaseLock()
 
   const sr = socket.readable.getReader()
-  let resp = ''
+  let connectResp = ''
   while (true) {
     const { value, done } = await sr.read()
     if (done) break
-    resp += new TextDecoder().decode(value)
-    if (resp.includes('\r\n\r\n')) break
+    connectResp += new TextDecoder().decode(value)
+    if (connectResp.includes('\r\n\r\n')) break
   }
   sr.releaseLock()
 
-  if (!resp.includes('200 Connection established')) {
+  if (!connectResp.includes('200 Connection established')) {
     socket.close()
-    throw new Error('CONNECT failed: ' + resp)
+    return { statusCode: 0, body: 'CONNECT_FAILED: ' + connectResp }
   }
 
-  // forge TLS over the tunnel
   let plaintext = ''
-  let tlsReady = false
   let pendingResolve = null
   let pendingReject = null
 
   const tls = forge.tls.createConnection({
     server: [],
     verify: () => true,
-    connected: () => { tlsReady = true },
+    connected: () => {},
     getData: (c, data) => {
       plaintext += data.getBytes()
       const hp = plaintext.indexOf('\r\n\r\n')
@@ -54,13 +52,11 @@ async function tunneledRequest(method, path, headers, body) {
         const hs = plaintext.substring(0, hp)
         const bs = hp + 4
         const cm = hs.match(/Content-Length:\s*(\d+)/i)
-        if (cm) {
-          if (plaintext.substring(bs).length >= parseInt(cm[1])) {
-            const sc = parseInt(hs.split(' ')[1])
-            pendingResolve({ statusCode: sc, body: plaintext.substring(bs).trim() })
-            pendingResolve = null
-          }
-        } else {
+        if (cm && plaintext.substring(bs).length >= parseInt(cm[1])) {
+          const sc = parseInt(hs.split(' ')[1])
+          pendingResolve({ statusCode: sc, body: plaintext.substring(bs).trim() })
+          pendingResolve = null
+        } else if (!cm) {
           const sc = parseInt(hs.split(' ')[1])
           pendingResolve({ statusCode: sc, body: plaintext.substring(bs).trim() })
           pendingResolve = null
@@ -79,7 +75,7 @@ async function tunneledRequest(method, path, headers, body) {
     },
     error: (c, error) => {
       if (pendingReject) {
-        pendingReject(new Error(error.message))
+        pendingReject(new Error('TLS_ERR: ' + error.message))
         pendingReject = null
       }
     },
@@ -88,53 +84,40 @@ async function tunneledRequest(method, path, headers, body) {
 
   tls.handshake()
 
-  // Read from tunnel → forge
   ;(async () => {
     const r = socket.readable.getReader()
     while (true) {
       const { value, done } = await r.read()
       if (done) break
-      tls.process(value)
+      try { tls.process(value) } catch (e) {
+        if (pendingReject) {
+          pendingReject(new Error('TLS_PROCESS_ERR: ' + e.message))
+          pendingReject = null
+        }
+      }
     }
     r.releaseLock()
   })()
 
-  // Build & send HTTP request
   let req = `${method} ${path} HTTP/1.1\r\nHost: ${NAVER_HOST}\r\n`
   for (const [k, v] of Object.entries(headers)) req += `${k}: ${v}\r\n`
   if (body) req += `Content-Length: ${new TextEncoder().encode(body).length}\r\n`
   req += '\r\n'
   if (body) req += body
 
-  const result = await new Promise((resolve, reject) => {
-    pendingResolve = resolve
-    pendingReject = reject
-    tls.prepare(req)
-  })
+  const result = await Promise.race([
+    new Promise((resolve, reject) => {
+      pendingResolve = resolve
+      pendingReject = reject
+      tls.prepare(req)
+    }),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('TIMEOUT: 30s')), 30000)
+    )
+  ])
 
   socket.close()
   return result
-}
-
-async function getAccessToken(clientId, clientSecret) {
-  const timestamp = String(Date.now())
-  const password = clientId + '_' + timestamp
-  const hashed = bcrypt.hashSync(password, clientSecret)
-  const clientSecretSign = btoa(hashed)
-
-  const body = new URLSearchParams({
-    client_id: clientId, timestamp,
-    client_secret_sign: clientSecretSign,
-    grant_type: 'client_credentials', type: 'SELF'
-  }).toString()
-
-  const res = await tunneledRequest('POST', '/external/v1/oauth2/token', {
-    'Content-Type': 'application/x-www-form-urlencoded',
-    'Connection': 'close'
-  }, body)
-
-  if (res.statusCode !== 200) throw new Error(`토큰 발급 실패: ${res.statusCode} - ${res.body}`)
-  return JSON.parse(res.body).access_token
 }
 
 export async function onRequest(context) {
@@ -146,17 +129,70 @@ export async function onRequest(context) {
 
   try {
     const start = Date.now()
+    const diag = {}
 
     const clientId = env.CLIENT_ID
     const clientSecret = env.CLIENT_SECRET
     if (!clientId || !clientSecret) {
-      return new Response(JSON.stringify({ success: false, message: 'CLIENT_ID / CLIENT_SECRET 환경변수가 설정되지 않음' }), {
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-      })
+      return new Response(JSON.stringify({
+        success: false, message: 'CLIENT_ID / CLIENT_SECRET env missing'
+      }), { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } })
     }
 
-    const token = await getAccessToken(clientId, clientSecret)
+    // 1. Test proxy connectivity first
+    try {
+      const testResult = await tunneledRequest('GET', '/', {
+        'Host': NAVER_HOST,
+        'Connection': 'close'
+      }, null)
+      diag.proxyTest = { statusCode: testResult.statusCode, body: testResult.body.substring(0, 300) }
+    } catch (e) {
+      return new Response(JSON.stringify({
+        success: false,
+        message: `Proxy test failed`,
+        diag: { proxyError: e.message, time: Date.now() - start + 'ms' }
+      }), { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } })
+    }
 
+    // 2. Get token
+    const timestamp = String(Date.now())
+    const password = clientId + '_' + timestamp
+    const hashed = bcrypt.hashSync(password, clientSecret)
+    const clientSecretSign = btoa(hashed)
+
+    const body = new URLSearchParams({
+      client_id: clientId, timestamp,
+      client_secret_sign: clientSecretSign,
+      grant_type: 'client_credentials', type: 'SELF'
+    }).toString()
+
+    const tokenRes = await tunneledRequest('POST', '/external/v1/oauth2/token', {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Connection': 'close'
+    }, body)
+
+    diag.tokenResponse = { statusCode: tokenRes.statusCode, body: tokenRes.body.substring(0, 500) }
+
+    if (tokenRes.statusCode !== 200) {
+      return new Response(JSON.stringify({
+        success: false,
+        message: `토큰 발급 실패: ${tokenRes.statusCode}`,
+        diag
+      }), { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } })
+    }
+
+    let token
+    try {
+      token = JSON.parse(tokenRes.body).access_token
+    } catch (e) {
+      return new Response(JSON.stringify({
+        success: false,
+        message: `토큰 응답 파싱 실패: ${e.message}`,
+        diag
+      }), { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } })
+    }
+
+    // 3. Search products
     const searchBody = JSON.stringify({ page: 1, size: 10 })
     const searchRes = await tunneledRequest('POST', '/external/v1/products/search', {
       'Authorization': `Bearer ${token}`,
@@ -164,10 +200,28 @@ export async function onRequest(context) {
       'Connection': 'close'
     }, searchBody)
 
-    if (searchRes.statusCode !== 200) throw new Error(`상품 조회 실패: ${searchRes.statusCode} - ${searchRes.body}`)
+    diag.searchResponse = { statusCode: searchRes.statusCode, body: searchRes.body.substring(0, 500) }
 
-    const data = JSON.parse(searchRes.body)
-    const products = data.contents || []
+    if (searchRes.statusCode !== 200) {
+      return new Response(JSON.stringify({
+        success: false,
+        message: `상품 조회 실패: ${searchRes.statusCode}`,
+        diag
+      }), { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } })
+    }
+
+    let searchData
+    try {
+      searchData = JSON.parse(searchRes.body)
+    } catch (e) {
+      return new Response(JSON.stringify({
+        success: false,
+        message: `검색 응답 파싱 실패: ${e.message}`,
+        diag
+      }), { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } })
+    }
+
+    const products = searchData.contents || []
     const sample = products.length > 0
       ? { originProductNo: products[0].originProductNo, name: products[0].name || null }
       : null
@@ -175,13 +229,12 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({
       success: true,
       elapsed: (Date.now() - start) + 'ms',
-      data: { totalCount: products.length, sample }
-    }), {
-      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-    })
+      data: { totalCount: products.length, sample },
+      diag
+    }), { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } })
   } catch (e) {
-    return new Response(JSON.stringify({ success: false, message: e.message }), {
-      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-    })
+    return new Response(JSON.stringify({
+      success: false, message: 'EXCEPTION: ' + e.message
+    }), { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } })
   }
 }
