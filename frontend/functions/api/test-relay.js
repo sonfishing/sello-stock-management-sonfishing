@@ -2,7 +2,7 @@ import { connect } from 'cloudflare:sockets'
 import bcrypt from 'bcryptjs'
 import forge from 'node-forge'
 
-const PROXY_HOST = 'sonfishing.iptime.org'
+const PROXY_HOST = '175.205.126.201'
 const PROXY_PORT = 5800
 const NAVER_HOST = 'api.commerce.naver.com'
 const NAVER_PORT = 443
