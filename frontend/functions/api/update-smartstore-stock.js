@@ -1,5 +1,4 @@
-import net from 'node:net'
-import tls from 'node:tls'
+import { connect } from 'cloudflare:sockets'
 import bcrypt from 'bcryptjs'
 
 const PROXY_HOST = 'sonfishing.iptime.org'
@@ -13,64 +12,76 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type'
 }
 
-function createTlsSocket() {
-  return new Promise((resolve, reject) => {
-    const tcp = net.connect(PROXY_PORT, PROXY_HOST, () => {
-      tcp.write(`CONNECT ${NAVER_HOST}:${NAVER_PORT} HTTP/1.1\r\nHost: ${NAVER_HOST}:${NAVER_PORT}\r\n\r\n`)
-    })
-    tcp.once('data', (chunk) => {
-      if (chunk.toString().includes('200 Connection established')) {
-        const tlsSocket = new tls.TLSSocket(tcp, {
-          host: NAVER_HOST,
-          servername: NAVER_HOST,
-          rejectUnauthorized: false
-        })
-        resolve(tlsSocket)
-      } else {
-        reject(new Error('Proxy CONNECT failed: ' + chunk.toString()))
-      }
-    })
-    tcp.on('error', reject)
-  })
+async function createTlsSocket() {
+  const socket = connect({ hostname: PROXY_HOST, port: PROXY_PORT })
+
+  const writer = socket.writable.getWriter()
+  await writer.write(new TextEncoder().encode(
+    `CONNECT ${NAVER_HOST}:${NAVER_PORT} HTTP/1.1\r\nHost: ${NAVER_HOST}:${NAVER_PORT}\r\n\r\n`
+  ))
+  writer.releaseLock()
+
+  const reader = socket.readable.getReader()
+  let resp = ''
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    resp += new TextDecoder().decode(value)
+    if (resp.includes('\r\n\r\n')) break
+  }
+  reader.releaseLock()
+
+  if (!resp.includes('200 Connection established')) {
+    throw new Error('Proxy CONNECT failed: ' + resp)
+  }
+
+  return socket.startTls({ serverName: NAVER_HOST })
 }
 
-function rawRequest(method, path, headers, body) {
-  return new Promise((resolve, reject) => {
-    createTlsSocket().then(socket => {
-      let req = `${method} ${path} HTTP/1.1\r\nHost: ${NAVER_HOST}\r\n`
-      for (const [k, v] of Object.entries(headers)) req += `${k}: ${v}\r\n`
-      if (body) req += `Content-Length: ${new TextEncoder().encode(body).length}\r\n`
-      req += '\r\n'
-      if (body) req += body
+async function rawRequest(method, path, headers, body) {
+  const socket = await createTlsSocket()
+  try {
+    const writer = socket.writable.getWriter()
+    let req = `${method} ${path} HTTP/1.1\r\nHost: ${NAVER_HOST}\r\n`
+    for (const [k, v] of Object.entries(headers)) req += `${k}: ${v}\r\n`
+    if (body) req += `Content-Length: ${new TextEncoder().encode(body).length}\r\n`
+    req += '\r\n'
+    if (body) req += body
 
-      let raw = ''
-      socket.on('data', (chunk) => {
-        raw += chunk.toString()
-        const headerEnd = raw.indexOf('\r\n\r\n')
-        if (headerEnd !== -1) {
-          const hs = raw.substring(0, headerEnd)
-          const bodyStart = headerEnd + 4
-          const clMatch = hs.match(/Content-Length:\s*(\d+)/i)
-          if (clMatch) {
-            const cl = parseInt(clMatch[1])
-            if (raw.substring(bodyStart).length >= cl) {
-              socket.end()
-              const statusLine = raw.substring(0, raw.indexOf('\r\n'))
-              const sc = parseInt(statusLine.split(' ')[1])
-              resolve({ statusCode: sc, body: raw.substring(bodyStart).trim() })
-            }
-          } else {
-            socket.end()
-            const statusLine = raw.substring(0, raw.indexOf('\r\n'))
-            const sc = parseInt(statusLine.split(' ')[1])
-            resolve({ statusCode: sc, body: raw.substring(bodyStart).trim() })
-          }
+    await writer.write(new TextEncoder().encode(req))
+    writer.releaseLock()
+
+    const reader = socket.readable.getReader()
+    let raw = ''
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      raw += new TextDecoder().decode(value, { stream: true })
+
+      const headerEnd = raw.indexOf('\r\n\r\n')
+      if (headerEnd !== -1) {
+        const hs = raw.substring(0, headerEnd)
+        const bodyStart = headerEnd + 4
+        const clMatch = hs.match(/Content-Length:\s*(\d+)/i)
+        if (clMatch) {
+          const cl = parseInt(clMatch[1])
+          if (raw.substring(bodyStart).length >= cl) break
+        } else if (/Transfer-Encoding:\s*chunked/i.test(hs)) {
+          if (raw.endsWith('0\r\n\r\n')) break
+        } else {
+          break
         }
-      })
-      socket.on('error', reject)
-      socket.write(req)
-    }).catch(reject)
-  })
+      }
+    }
+    reader.releaseLock()
+
+    const headerEnd = raw.indexOf('\r\n\r\n')
+    const statusLine = raw.substring(0, raw.indexOf('\r\n'))
+    const sc = parseInt(statusLine.split(' ')[1])
+    return { statusCode: sc, body: raw.substring(headerEnd + 4).trim() }
+  } finally {
+    await socket.close()
+  }
 }
 
 async function getAccessToken(clientId, clientSecret) {
