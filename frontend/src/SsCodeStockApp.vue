@@ -38,7 +38,7 @@
         <button class="menu-btn test-btn" @click="testRelay" :disabled="testingRelay">
           {{ testingRelay ? '조회 중...' : '📋 스마트스토어 상품 조회' }}
         </button>
-        <button class="menu-btn config-btn" @click="showConfig = !showConfig">
+        <button class="menu-btn config-btn" @click="toggleConfig">
           ⚙️
         </button>
       </div>
@@ -65,6 +65,7 @@
         placeholder="https://xxxx.trycloudflare.com"
       />
       <button class="config-apply-btn" @click="persistRelayUrl">적용</button>
+      <span v-if="serverRelayUrl" class="config-server-info">서버 기본값: {{ serverRelayUrl }}</span>
     </div>
 
     <div class="content-area">
@@ -174,6 +175,20 @@ const testingRelay = ref(false)
 const testResult = ref(null)
 const showConfig = ref(false)
 const relayUrl = ref(localStorage.getItem('relay_url') || '')
+const serverRelayUrl = ref('')
+
+function toggleConfig() {
+  showConfig.value = !showConfig.value
+  if (showConfig.value) loadServerRelayUrl()
+}
+
+async function loadServerRelayUrl() {
+  try {
+    const res = await fetch('/api/get-relay-url')
+    const data = await res.json()
+    if (data.success) serverRelayUrl.value = data.relayUrl
+  } catch {}
+}
 
 function persistRelayUrl() {
   const url = relayUrl.value.trim()
@@ -510,5 +525,11 @@ async function testRelay() {
 }
 .config-btn:hover {
   background: var(--hover-bg);
+}
+.config-server-info {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: auto;
+  white-space: nowrap;
 }
 </style>
