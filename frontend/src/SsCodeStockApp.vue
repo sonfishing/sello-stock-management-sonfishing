@@ -219,10 +219,9 @@ async function updateStock(product) {
   updating.value = new Set([...updating.value, id])
 
   try {
-    const newStatus = newQty === 0 ? '품절' : '판매중'
     const { error: dbError } = await supabase
       .from('smartstore_products')
-      .update({ stock_quantity: newQty, status: newStatus })
+      .update({ stock_quantity: newQty })
       .eq('id', id)
 
     if (dbError) throw new Error('DB 업데이트 실패: ' + dbError.message)
@@ -238,14 +237,19 @@ async function updateStock(product) {
     if (!result.success) {
       showToast('스마트스토어 업데이트 실패: ' + (result.message || '알 수 없는 오류'))
     } else {
-      const { data: refreshed, error: refetchErr } = await supabase
+      const newStatus = newQty === 0 ? '품절' : '판매중'
+      await supabase.from('smartstore_products').update({ status: newStatus }).eq('id', id)
+
+      const { data: refreshed } = await supabase
         .from('smartstore_products')
         .select('*')
         .eq('id', id)
         .single()
-      if (!refetchErr && refreshed) {
-        Object.assign(product, refreshed)
-        editQuantities[product.id] = product.stock_quantity ?? 0
+
+      if (refreshed) {
+        const idx = products.value.findIndex(p => p.id === id)
+        if (idx !== -1) products.value[idx] = refreshed
+        editQuantities[id] = refreshed.stock_quantity ?? 0
       }
       showToast('재고가 수정되었습니다.')
     }
