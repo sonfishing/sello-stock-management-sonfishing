@@ -74,20 +74,29 @@
 
         <div v-else-if="products.length > 0" class="table-container">
           <div class="table-wrapper">
-            <table class="product-table">
+              <table class="product-table">
               <thead>
                 <tr>
-                  <th style="width: 38%;">name</th>
-                  <th style="width: 17%;">category</th>
-                  <th style="width: 12%; text-align: center;">stock_quantity</th>
-                  <th style="width: 15%;">status</th>
-                  <th style="width: 18%;">관리</th>
+                  <th style="width: 20%;">상품명</th>
+                  <th style="width: 8%; text-align: center;">기본가</th>
+                  <th style="width: 8%; text-align: center;">옵션가</th>
+                  <th style="width: 10%;">분류</th>
+                  <th style="width: 10%; text-align: center;">재고</th>
+                  <th style="width: 12%;">상태</th>
+                  <th style="width: 12%;">스토어</th>
+                  <th style="width: 20%;">관리</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="product in products" :key="product.id" class="premium-row">
                   <td>
                     <div class="padding-cell text-content">{{ product.name || '-' }}</div>
+                  </td>
+                  <td style="text-align: center;">
+                    <div class="padding-cell">{{ product.base_price?.toLocaleString() || '-' }}</div>
+                  </td>
+                  <td style="text-align: center;">
+                    <div class="padding-cell">{{ product.additional_price?.toLocaleString() || '-' }}</div>
                   </td>
                   <td>
                     <div class="padding-cell">{{ product.category || '-' }}</div>
@@ -104,6 +113,9 @@
                   </td>
                   <td>
                     <div class="padding-cell">{{ product.status || '-' }}</div>
+                  </td>
+                  <td>
+                    <div class="padding-cell">{{ product.seller_code || '-' }}</div>
                   </td>
                   <td style="text-align: center;">
                     <button
