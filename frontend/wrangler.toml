@@ -1,2 +1,5 @@
 compatibility_date = "2024-10-01"
 compatibility_flags = ["nodejs_compat"]
+
+[vars]
+RELAY_URL = "https://confidential-integral-leaves-kelkoo.trycloudflare.com"

@@ -1,13 +1,14 @@
-const RELAY_URL = 'https://confidential-integral-leaves-kelkoo.trycloudflare.com'
-
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type'
 }
 
+const DEFAULT_RELAY_URL = 'https://confidential-integral-leaves-kelkoo.trycloudflare.com'
+
 export async function onRequest(context) {
-  const { request } = context
+  const { request, env } = context
+  const relayUrl = env.RELAY_URL || DEFAULT_RELAY_URL
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
@@ -30,7 +31,7 @@ export async function onRequest(context) {
       })
     }
 
-    const relayRes = await fetch(RELAY_URL + '/update-stock', {
+    const relayRes = await fetch(relayUrl + '/update-stock', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ product, newStockQuantity })
