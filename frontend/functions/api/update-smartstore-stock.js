@@ -1,4 +1,4 @@
-const RELAY_URL = 'http://175.205.126.201:5800'
+const RELAY_URL = 'http://sonfishing.iptime.org:5800'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
