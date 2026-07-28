@@ -219,7 +219,7 @@ async function updateStock(product) {
   updating.value = new Set([...updating.value, id])
 
   try {
-    const newStatus = newQty === 0 ? '품절' : product.status
+    const newStatus = newQty === 0 ? '품절' : '판매중'
     const { error: dbError } = await supabase
       .from('smartstore_products')
       .update({ stock_quantity: newQty, status: newStatus })
