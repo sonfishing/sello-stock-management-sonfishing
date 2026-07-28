@@ -121,6 +121,18 @@ def test_naver():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
+@app.route("/product/<product_id>", methods=["GET"])
+def get_product(product_id):
+    try:
+        token = get_access_token(CLIENT_ID, CLIENT_SECRET)
+        url = f"https://api.commerce.naver.com/external/v1/products/{product_id}"
+        headers = {"Authorization": f"Bearer {token}"}
+        res = requests.get(url, headers=headers, timeout=15)
+        return jsonify({"success": res.status_code == 200, "status": res.status_code, "data": res.json() if res.status_code == 200 else res.text})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
