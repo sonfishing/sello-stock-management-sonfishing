@@ -237,7 +237,15 @@ async function updateStock(product) {
     if (!result.success) {
       showToast('스마트스토어 업데이트 실패: ' + (result.message || '알 수 없는 오류'))
     } else {
-      product.stock_quantity = newQty
+      const { data: refreshed, error: refetchErr } = await supabase
+        .from('smartstore_products')
+        .select('*')
+        .eq('id', id)
+        .single()
+      if (!refetchErr && refreshed) {
+        Object.assign(product, refreshed)
+        editQuantities[product.id] = product.stock_quantity ?? 0
+      }
       showToast('재고가 수정되었습니다.')
     }
   } catch (e) {
