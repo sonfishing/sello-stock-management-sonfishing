@@ -63,7 +63,7 @@ def update_naver_stock(token, product, new_stock_quantity):
 
     res = requests.put(url, headers=headers, json=body)
     if res.status_code != 200:
-        raise Exception(f"스마트스토어 재고 업데이트 실패: {res.status_code} - {res.text}")
+        raise Exception(f"스마트스토어 재고 업데이트 실패: {res.status_code} - 요청URL: {url} - {res.text}")
     return res.json()
 
 

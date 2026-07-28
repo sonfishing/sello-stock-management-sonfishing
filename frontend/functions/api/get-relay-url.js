@@ -1,4 +1,4 @@
-const DEFAULT_RELAY_URL = 'https://confidential-integral-leaves-kelkoo.trycloudflare.com'
+const DEFAULT_RELAY_URL = 'https://relay.sonfishing.co.kr'
 
 export async function onRequest(context) {
   const { env } = context

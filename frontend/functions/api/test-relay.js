@@ -4,7 +4,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type'
 }
 
-const DEFAULT_RELAY_URL = 'https://confidential-integral-leaves-kelkoo.trycloudflare.com'
+const DEFAULT_RELAY_URL = 'https://relay.sonfishing.co.kr'
 
 export async function onRequest(context) {
   const { request, env } = context

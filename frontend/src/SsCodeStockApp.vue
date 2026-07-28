@@ -38,9 +38,6 @@
         <button class="menu-btn test-btn" @click="testRelay" :disabled="testingRelay">
           {{ testingRelay ? '조회 중...' : '📋 스마트스토어 상품 조회' }}
         </button>
-        <button class="menu-btn config-btn" @click="toggleConfig">
-          ⚙️
-        </button>
       </div>
       <div class="right-actions">
         <div class="search-box">
@@ -54,19 +51,6 @@
         </div>
       </div>
     </header>
-
-    <div v-if="showConfig" class="config-bar">
-      <label class="config-label">릴레이 서버 주소:</label>
-      <input
-        type="text"
-        v-model="relayUrl"
-        @change="persistRelayUrl"
-        class="config-input"
-        placeholder="https://xxxx.trycloudflare.com"
-      />
-      <button class="config-apply-btn" @click="persistRelayUrl">적용</button>
-      <span v-if="serverRelayUrl" class="config-server-info">서버 기본값: {{ serverRelayUrl }}</span>
-    </div>
 
     <div class="content-area">
       <div class="list-view">
@@ -173,32 +157,6 @@ const updating = ref(new Set())
 const toastMessage = ref('')
 const testingRelay = ref(false)
 const testResult = ref(null)
-const showConfig = ref(false)
-const relayUrl = ref(localStorage.getItem('relay_url') || '')
-const serverRelayUrl = ref('')
-
-function toggleConfig() {
-  showConfig.value = !showConfig.value
-  if (showConfig.value) loadServerRelayUrl()
-}
-
-async function loadServerRelayUrl() {
-  try {
-    const res = await fetch('/api/get-relay-url')
-    const data = await res.json()
-    if (data.success) serverRelayUrl.value = data.relayUrl
-  } catch {}
-}
-
-function persistRelayUrl() {
-  const url = relayUrl.value.trim()
-  if (url) {
-    localStorage.setItem('relay_url', url)
-  } else {
-    localStorage.removeItem('relay_url')
-  }
-  showToast('릴레이 URL이 저장되었습니다.')
-}
 
 function showToast(msg) {
   toastMessage.value = msg
@@ -252,11 +210,9 @@ async function updateStock(product) {
 
     if (dbError) throw new Error('DB 업데이트 실패: ' + dbError.message)
 
-    const headers = { 'Content-Type': 'application/json' }
-    if (relayUrl.value.trim()) headers['X-Relay-Url'] = relayUrl.value.trim()
     const res = await fetch('/api/update-smartstore-stock', {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ product, newStockQuantity: newQty })
     })
 
@@ -281,9 +237,7 @@ async function testRelay() {
   testingRelay.value = true
   testResult.value = null
   try {
-    const opts = {}
-    if (relayUrl.value.trim()) opts.headers = { 'X-Relay-Url': relayUrl.value.trim() }
-    const res = await fetch('/api/test-relay', opts)
+    const res = await fetch('/api/test-relay')
     const data = await res.json()
     if (data.success) {
       const sample = data.data?.sample
@@ -470,66 +424,5 @@ async function testRelay() {
   border: 1px solid #fca5a5;
 }
 
-.config-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 20px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border-color);
-  font-size: 13px;
-}
-.config-label {
-  font-weight: 600;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-.config-input {
-  flex: 1;
-  max-width: 500px;
-  padding: 4px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 13px;
-  font-family: 'Consolas', 'Courier New', monospace;
-  background: var(--surface);
-  color: var(--text-primary);
-  outline: none;
-}
-.config-input:focus {
-  border-color: var(--primary);
-}
-.config-apply-btn {
-  padding: 4px 12px;
-  border: none;
-  border-radius: 6px;
-  background: var(--primary, #1B64DA);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.config-apply-btn:hover {
-  background: #1552b3;
-}
-.config-btn {
-  margin-left: 8px;
-  padding: 6px 10px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 16px;
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-.config-btn:hover {
-  background: var(--hover-bg);
-}
-.config-server-info {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-left: auto;
-  white-space: nowrap;
-}
+
 </style>
