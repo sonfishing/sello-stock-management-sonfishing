@@ -8,7 +8,7 @@ const DEFAULT_RELAY_URL = 'https://confidential-integral-leaves-kelkoo.trycloudf
 
 export async function onRequest(context) {
   const { request, env } = context
-  const relayUrl = env.RELAY_URL || DEFAULT_RELAY_URL
+  const relayUrl = request.headers.get('X-Relay-Url') || env.RELAY_URL || DEFAULT_RELAY_URL
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
