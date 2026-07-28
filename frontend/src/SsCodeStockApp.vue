@@ -77,20 +77,24 @@
               <table class="product-table">
               <thead>
                 <tr>
-                  <th style="width: 20%;">상품명</th>
+                  <th style="width: 18%;">상품명</th>
+                  <th style="width: 14%;">옵션명</th>
                   <th style="width: 8%; text-align: center;">기본가</th>
                   <th style="width: 8%; text-align: center;">옵션가</th>
                   <th style="width: 10%;">분류</th>
                   <th style="width: 10%; text-align: center;">재고</th>
                   <th style="width: 12%;">상태</th>
-                  <th style="width: 12%;">스토어</th>
-                  <th style="width: 20%;">관리</th>
+                  <th style="width: 10%;">스토어</th>
+                  <th style="width: 16%;">관리</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="product in products" :key="product.id" class="premium-row">
                   <td>
                     <div class="padding-cell text-content">{{ product.name || '-' }}</div>
+                  </td>
+                  <td>
+                    <div class="padding-cell">{{ product.option_name || '-' }}</div>
                   </td>
                   <td style="text-align: center;">
                     <div class="padding-cell">{{ product.base_price?.toLocaleString() || '-' }}</div>
