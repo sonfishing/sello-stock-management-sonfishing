@@ -135,4 +135,4 @@ if __name__ == "__main__":
     print("  공유기에서 5800 포트 포워딩 설정")
     print("  → 생성된 https://xxxx.ngrok.io 주소를 사용")
     print("=" * 50)
-    app.run(host="0.0.0.0", port=5800, debug=True)
+    app.run(host="0.0.0.0", port=5800, debug=False)
