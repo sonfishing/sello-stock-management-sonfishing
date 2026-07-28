@@ -40,26 +40,46 @@ def update_naver_stock(token, product, new_stock_quantity):
     origin_product_no = product.get("origin_product_no")
     option_id = product.get("option_id")
 
-    if category == "일반옵션":
-        if not origin_product_no or not option_id:
-            raise Exception("일반옵션: origin_product_no, option_id 필요")
-        url = f"https://api.commerce.naver.com/external/v1/products/{origin_product_no}/options/{option_id}/stock"
-    elif category == "추가옵션":
-        if not origin_product_no or not option_id:
-            raise Exception("추가옵션: origin_product_no, option_id 필요")
-        url = f"https://api.commerce.naver.com/external/v1/products/{origin_product_no}/supplement-products/{option_id}/stock"
-    elif category == "원상품":
-        if not origin_product_no:
-            raise Exception("원상품: origin_product_no 필요")
-        url = f"https://api.commerce.naver.com/external/v1/products/{origin_product_no}/stock"
-    else:
-        raise Exception(f"알 수 없는 category: {category}")
-
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
-    body = {"stockQuantity": new_stock_quantity}
+
+    if category == "일반옵션":
+        if not origin_product_no or not option_id:
+            raise Exception("일반옵션: origin_product_no, option_id 필요")
+        url = f"https://api.commerce.naver.com/external/v1/products/origin-products/{origin_product_no}/option-stock"
+        body = {
+            "productSalePrice": {"salePrice": product.get("base_price", 0)},
+            "optionInfo": {
+                "optionCombinations": [{
+                    "id": option_id,
+                    "stockQuantity": new_stock_quantity,
+                    "usable": True
+                }]
+            }
+        }
+    elif category == "추가옵션":
+        if not origin_product_no or not option_id:
+            raise Exception("추가옵션: origin_product_no, option_id 필요")
+        url = f"https://api.commerce.naver.com/external/v1/products/origin-products/{origin_product_no}/option-stock"
+        body = {
+            "productSalePrice": {"salePrice": product.get("base_price", 0)},
+            "optionInfo": {
+                "optionCombinations": [{
+                    "id": option_id,
+                    "stockQuantity": new_stock_quantity,
+                    "usable": True
+                }]
+            }
+        }
+    elif category == "원상품":
+        if not origin_product_no:
+            raise Exception("원상품: origin_product_no 필요")
+        url = f"https://api.commerce.naver.com/external/v1/products/{origin_product_no}/stock"
+        body = {"stockQuantity": new_stock_quantity}
+    else:
+        raise Exception(f"알 수 없는 category: {category}")
 
     res = requests.put(url, headers=headers, json=body)
     if res.status_code != 200:
