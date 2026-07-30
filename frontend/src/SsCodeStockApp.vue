@@ -216,6 +216,7 @@ async function updateStock(product) {
   }
 
   const id = product.id
+  const oldQty = product.stock_quantity
   updating.value = new Set([...updating.value, id])
 
   try {
@@ -235,6 +236,7 @@ async function updateStock(product) {
     const result = await res.json()
 
     if (!result.success) {
+      await supabase.from('smartstore_products').update({ stock_quantity: oldQty }).eq('id', id)
       showToast('스마트스토어 업데이트 실패: ' + (result.message || '알 수 없는 오류'))
     } else {
       const newStatus = newQty === 0 ? '품절' : '판매중'
