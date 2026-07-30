@@ -159,12 +159,5 @@ def health():
 
 
 if __name__ == "__main__":
-    print("=" * 50)
-    print("Naver SmartStore Relay Server")
-    print("=" * 50)
-    print("서버 실행 중: http://0.0.0.0:5800")
-    print("\niptime 포트포워딩 시:")
-    print("  공유기에서 5800 포트 포워딩 설정")
-    print("  → 생성된 https://xxxx.ngrok.io 주소를 사용")
-    print("=" * 50)
+    print("Naver SmartStore Relay Server - http://0.0.0.0:5800")
     app.run(host="0.0.0.0", port=5800, debug=False)
