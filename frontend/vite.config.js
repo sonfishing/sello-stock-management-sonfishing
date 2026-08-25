@@ -12,7 +12,8 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         zerostock: resolve(__dirname, '0stock.html'),
-        sscodestock: resolve(__dirname, 'ss_code_stock.html')
+        sscodestock: resolve(__dirname, 'ss_code_stock.html'),
+        cstodolist: resolve(__dirname, 'cs_todolist.html')
       }
     }
   }

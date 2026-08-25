@@ -1,5 +1,12 @@
+name = "sello-stock-management-sonfishing"
 compatibility_date = "2024-10-01"
 compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"
 
 [vars]
 RELAY_URL = "https://relay.sonfishing.co.kr"
+
+[[kv_namespaces]]
+binding = "CS_MESSAGES"
+id = "5bc3304aea624131b74068d9d66ddc30"
+preview_id = "5bc3304aea624131b74068d9d66ddc30"

@@ -25,6 +25,9 @@
         <a href="ss_code_stock.html" class="nav-link">
           <span class="icon">🏪</span>스마트스토어 재고변경
         </a>
+        <a href="cs_todolist.html" class="nav-link">
+          <span class="icon">💬</span>CS 투두리스트
+        </a>
       </nav>
     </div>
   </div>
