@@ -1,7 +1,6 @@
 import time
 import sys
-
-from supabase import create_client
+import requests
 
 from ss_extract_detailed import (
     CLIENT_ID, CLIENT_SECRET,
@@ -10,7 +9,18 @@ from ss_extract_detailed import (
     get_product_detail,
     parse_product_rows,
 )
-from txt_to_supabase import SUPABASE_URL, SUPABASE_SERVICE_KEY, TABLE_NAME
+
+# Supabase REST API 직접 호출 (supabase SDK 미사용 -> Termux 등에서 설치 부담 없음)
+SUPABASE_URL = "https://ubwccmgpoghfecmgiici.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVid2NjbWdwb2doZmVjbWdpaWNpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjIwMDU1NSwiZXhwIjoyMDkxNzc2NTU1fQ.M49FLuvgGGe2M5oRt6MavxUH_Ju5r6Mr95PW6ujWq5g"
+TABLE_NAME = "smartstore_products"
+BATCH_SIZE = 500
+
+PRODUCT_LIST_FILE = "product_list.txt"
+DETAIL_LIST_FILE = "product_detail_list.txt"
+DETAIL_HEADERS = ["원상품코드", "구분", "옵션ID", "상품명", "옵션명", "기본가격", "추가금액",
+                  "재고수량", "판매상태", "관리코드", "태그", "display_status"]
+
 
 # Windows 콘솔에서 인코딩 오류가 발생하지 않도록 설정
 if sys.stdout.encoding != 'utf-8':
@@ -20,32 +30,48 @@ if sys.stdout.encoding != 'utf-8':
         import io
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-PRODUCT_LIST_FILE = "product_list.txt"
-DETAIL_LIST_FILE = "product_detail_list.txt"
-DETAIL_HEADERS = ["원상품코드", "구분", "옵션ID", "상품명", "옵션명", "기본가격", "추가금액",
-                  "재고수량", "판매상태", "관리코드", "태그", "display_status"]
-BATCH_SIZE = 500
+
+def _sb_headers():
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+    }
 
 
-def get_supabase_origin_nos(supabase):
-    """Supabase smartstore_products 에 저장된 원상품코드 전체를 페이지네이션으로 읽어옵니다."""
+def get_supabase_origin_nos():
+    """Supabase smartstore_products 에 저장된 원상품코드 전체를 페이지네이션으로 읽어옵니다 (REST)."""
     ids = set()
     page_size = 1000
-    start = 0
+    offset = 0
     while True:
-        resp = (supabase.table(TABLE_NAME)
-                .select("origin_product_no")
-                .range(start, start + page_size - 1)
-                .execute())
-        data = resp.data or []
+        url = (f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}"
+               f"?select=origin_product_no&limit={page_size}&offset={offset}")
+        resp = requests.get(url, headers=_sb_headers(), timeout=30)
+        resp.raise_for_status()
+        data = resp.json() or []
         if not data:
             break
         for r in data:
-            ids.add(str(r["origin_product_no"]).strip())
+            ids.add(str(r.get("origin_product_no", "")).strip())
         if len(data) < page_size:
             break
-        start += page_size
+        offset += page_size
     return ids
+
+
+def insert_rows_supabase(rows_dicts):
+    """신규 행을 Supabase에 배치 INSERT 합니다 (REST)."""
+    url = f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}"
+    inserted = 0
+    for i in range(0, len(rows_dicts), BATCH_SIZE):
+        batch = rows_dicts[i:i + BATCH_SIZE]
+        resp = requests.post(url, headers=_sb_headers(), json=batch, timeout=60)
+        resp.raise_for_status()
+        inserted += len(batch)
+        print(f"  ☁️ Supabase {inserted}/{len(rows_dicts)}행 삽입 완료")
+    return inserted
 
 
 def rows_to_db_dicts(rows):
@@ -98,10 +124,13 @@ def main():
     print("\n🔍 [1/3단계] 스토어 전체 상품 목록을 조회합니다...")
     api_ids = get_all_product_ids(token)
 
-    # [2단계] Supabase 저장된 원상품코드와 비교하여 신규만 추출
+    # [2단계] Supabase 저장된 원상품코드와 비교하여 신규만 추출 (REST)
     print("\n🗄️ [2/3단계] Supabase 에서 기존 원상품코드를 조회합니다...")
-    supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    saved_ids = get_supabase_origin_nos(supabase)
+    try:
+        saved_ids = get_supabase_origin_nos()
+    except Exception as e:
+        print(f"⚠️ Supabase 조회 실패: {e}")
+        saved_ids = set()
 
     new_ids = [i for i in api_ids if i not in saved_ids]
     print(f"\n📊 스토어 전체: {len(api_ids)}개 | Supabase 저장됨: {len(saved_ids & set(api_ids))}개 | 신규: {len(new_ids)}개")
@@ -167,12 +196,11 @@ def main():
             time.sleep(0.6)
 
     # Supabase 배치 삽입 (신규 행만)
-    inserted = 0
-    for i in range(0, len(db_rows), BATCH_SIZE):
-        batch = db_rows[i:i + BATCH_SIZE]
-        supabase.table(TABLE_NAME).insert(batch).execute()
-        inserted += len(batch)
-        print(f"  ☁️ Supabase {inserted}/{len(db_rows)}행 삽입 완료")
+    if db_rows:
+        try:
+            insert_rows_supabase(db_rows)
+        except Exception as e:
+            print(f"⚠️ Supabase 삽입 실패: {e}")
 
     elapsed = time.time() - start_time
     print(f"\n✨ 완료! 신규 {len(new_ids) - len(fail_ids)}개 상품에서 {total_rows}행 처리되었습니다.")
