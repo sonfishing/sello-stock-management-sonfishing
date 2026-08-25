@@ -6,15 +6,18 @@ import json
 import subprocess
 import sys
 import threading
+import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 CLIENT_ID = "6qGLtWWL2ryrsoLgpvWdDd"
 CLIENT_SECRET = "$2a$04$ONp/Q938mpD/LfX/Bzhl4O"
 
-# 신규 상품 동기화 스크립트 (ss_sync_new.py) 위치
-SYNC_SCRIPT_PATH = r"C:\code\zzii_ss\ss_sync_new.py"
-SYNC_WORK_DIR = r"C:\code\zzii_ss"
+# 신규 상품 동기화 스크립트(ss_sync_new.py)는 이 파일과 같은 디렉토리에 위치한다고 가정
+# (Windows PC, Termux 폰 모두 경로에 구애받지 않도록 __file__ 기준으로 해석)
+_HERE = os.path.dirname(os.path.abspath(__file__))
+SYNC_SCRIPT_PATH = os.path.join(_HERE, "ss_sync_new.py")
+SYNC_WORK_DIR = _HERE
 _sync_lock = threading.Lock()
 
 app = Flask(__name__)

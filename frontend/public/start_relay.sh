@@ -12,6 +12,12 @@ sleep 2
 # 현재 디렉토리로 이동
 cd /data/data/com.termux/files/home
 
+# 최신 파이썬 스크립트 받아오기 (item.sonfishing.co.kr 정적 호스팅)
+BASE="https://item.sonfishing.co.kr"
+for f in naver_relay_server.py ss_sync_new.py ss_extract_detailed.py txt_to_supabase.py; do
+  curl -fsSL "$BASE/$f" -o "$f" && echo "downloaded $f" || echo "download failed: $f"
+done
+
 # 릴레이 서버 시작
 nohup python naver_relay_server.py > ~/relay.log 2>&1 &
 sleep 2
