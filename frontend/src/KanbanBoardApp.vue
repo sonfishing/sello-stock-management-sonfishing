@@ -68,16 +68,25 @@
                 ref="editInput"
                 v-model="editTitle"
                 class="card-edit-input"
-                rows="2"
+                rows="1"
                 @keydown.enter.exact.prevent="saveEdit(card)"
                 @keydown.escape="cancelEdit"
                 @blur="saveEdit(card)"
-                placeholder="할일을 입력하세요..."
+                placeholder="제목을 입력하세요..."
+              ></textarea>
+              <textarea
+                v-model="editDescription"
+                class="card-edit-input"
+                rows="2"
+                @keydown.enter.exact.prevent="saveEdit(card)"
+                @keydown.escape.exact.prevent="cancelEdit"
+                placeholder="내용을 입력하세요..."
               ></textarea>
             </template>
             <template v-else>
               <div class="card-content">
                 <div class="card-title">{{ card.title }}</div>
+                <div v-if="card.description" class="card-description">{{ card.description }}</div>
                 <div class="card-date">{{ formatDate(card.created_at) }}</div>
               </div>
               <div class="card-actions">
@@ -135,12 +144,14 @@ const dragOverColumn = ref(null)
 
 const editingCardId = ref(null)
 const editTitle = ref('')
+const editDescription = ref('')
 const editInput = ref(null)
 
 const sampleSql = `-- Supabase SQL Editor에서 실행하세요
 CREATE TABLE IF NOT EXISTS kanban_cards (
   id BIGSERIAL PRIMARY KEY,
   title TEXT NOT NULL,
+  description TEXT,
   status TEXT NOT NULL DEFAULT 'todo',
   position INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -228,6 +239,7 @@ async function addCard(status) {
 
   const newCard = {
     title,
+    description: '',
     status,
     position: maxPos + 1,
     created_at: new Date().toISOString()
@@ -303,7 +315,8 @@ async function moveCard(card, newStatus) {
 
 function startEdit(card) {
   editingCardId.value = card.id
-  editTitle.value = card.title
+  editTitle.value = card.title || ''
+  editDescription.value = card.description || ''
   nextTick(() => {
     const inputs = document.querySelectorAll('.card-edit-input')
     if (inputs.length > 0) inputs[inputs.length - 1].focus()
@@ -313,21 +326,28 @@ function startEdit(card) {
 function cancelEdit() {
   editingCardId.value = null
   editTitle.value = ''
+  editDescription.value = ''
 }
 
 async function saveEdit(card) {
   const newTitle = editTitle.value.trim()
-  if (!newTitle || newTitle === card.title) {
+  const newDescription = editDescription.value.trim()
+  if (!newTitle) {
+    cancelEdit()
+    return
+  }
+  if (newTitle === card.title && newDescription === (card.description || '')) {
     cancelEdit()
     return
   }
 
   card.title = newTitle
+  card.description = newDescription
   try {
     if (usingSupabase.value) {
       const { error } = await supabase
         .from('kanban_cards')
-        .update({ title: newTitle, updated_at: new Date().toISOString() })
+        .update({ title: newTitle, description: newDescription, updated_at: new Date().toISOString() })
         .eq('id', card.id)
       if (error) throw error
     } else {
@@ -490,6 +510,13 @@ onMounted(loadCards)
   color: #1f2937;
   line-height: 1.4;
   word-break: break-word;
+}
+
+.card-description {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.4;
+  margin-top: 2px;
 }
 
 .card-date {
