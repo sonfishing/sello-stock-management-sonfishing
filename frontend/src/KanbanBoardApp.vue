@@ -557,6 +557,9 @@ onMounted(loadCards)
   outline: none;
   line-height: 1.4;
 }
+.card-edit-input + .card-edit-input {
+  margin-top: 6px;
+}
 
 .add-card-area {
   display: flex;
