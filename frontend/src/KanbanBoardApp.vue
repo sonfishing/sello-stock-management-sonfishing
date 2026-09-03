@@ -76,7 +76,10 @@
               ></textarea>
             </template>
             <template v-else>
-              <div class="card-title">{{ card.title }}</div>
+              <div class="card-content">
+                <div class="card-title">{{ card.title }}</div>
+                <div class="card-date">{{ formatDate(card.created_at) }}</div>
+              </div>
               <div class="card-actions">
                 <button class="card-btn move-btn" @click.stop="moveCard(card, getNextColumn(col.id))" title="다음 컬럼으로 이동">
                   →
@@ -166,6 +169,16 @@ function getColumnCards(colId) {
 function getNextColumn(currentId) {
   const idx = columns.findIndex(c => c.id === currentId)
   return idx < columns.length - 1 ? columns[idx + 1].id : null
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const month = d.getMonth() + 1
+  const day = d.getDate()
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return `${month}/${day} ${hours}:${minutes}`
 }
 
 function showToast(msg) {
@@ -467,12 +480,22 @@ onMounted(loadCards)
 .kanban-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 .kanban-card.dragging { opacity: 0.4; }
 
-.card-title {
+.card-content {
   flex: 1;
+  min-width: 0;
+}
+
+.card-title {
   font-size: 14px;
   color: #1f2937;
   line-height: 1.4;
   word-break: break-word;
+}
+
+.card-date {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 4px;
 }
 
 .card-actions {
