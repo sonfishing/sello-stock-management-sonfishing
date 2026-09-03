@@ -28,6 +28,9 @@
         <a href="cs_todolist.html" class="nav-link">
           <span class="icon">💬</span>CS 투두리스트
         </a>
+        <a href="kanban.html" class="nav-link">
+          <span class="icon">📋</span>칸반 보드
+        </a>
       </nav>
     </div>
   </div>
