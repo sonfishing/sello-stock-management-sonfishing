@@ -64,24 +64,26 @@
             @dblclick="startEdit(card)"
           >
             <template v-if="editingCardId === card.id">
-              <textarea
-                ref="editInput"
-                v-model="editTitle"
-                class="card-edit-input"
-                rows="1"
-                @keydown.enter.exact.prevent="saveEdit(card)"
-                @keydown.escape="cancelEdit"
-                @blur="saveEdit(card)"
-                placeholder="제목을 입력하세요..."
-              ></textarea>
-              <textarea
-                v-model="editDescription"
-                class="card-edit-input"
-                rows="2"
-                @keydown.enter.exact.prevent="saveEdit(card)"
-                @keydown.escape.exact.prevent="cancelEdit"
-                placeholder="내용을 입력하세요..."
-              ></textarea>
+              <div class="edit-area">
+                <textarea
+                  ref="editInput"
+                  v-model="editTitle"
+                  class="card-edit-input"
+                  rows="1"
+                  @keydown.enter.exact.prevent="saveEdit(card)"
+                  @keydown.escape="cancelEdit"
+                  @blur="saveEdit(card)"
+                  placeholder="제목을 입력하세요..."
+                ></textarea>
+                <textarea
+                  v-model="editDescription"
+                  class="card-edit-input"
+                  rows="2"
+                  @keydown.enter.exact.prevent="saveEdit(card)"
+                  @keydown.escape.exact.prevent="cancelEdit"
+                  placeholder="내용을 입력하세요..."
+                ></textarea>
+              </div>
             </template>
             <template v-else>
               <div class="card-content">
@@ -89,7 +91,7 @@
                 <div v-if="card.description" class="card-description">{{ card.description }}</div>
                 <div class="card-date">{{ formatDate(card.created_at) }}</div>
               </div>
-              <div class="card-actions">
+              <div class="card-actions" v-if="editingCardId !== card.id">
                 <button class="card-btn move-btn" @click.stop="moveCard(card, getNextColumn(col.id))" title="다음 컬럼으로 이동">
                   →
                 </button>
@@ -559,6 +561,11 @@ onMounted(loadCards)
 }
 .card-edit-input + .card-edit-input {
   margin-top: 6px;
+}
+.edit-area {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
 }
 
 .add-card-area {
