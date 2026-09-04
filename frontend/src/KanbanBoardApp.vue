@@ -92,12 +92,25 @@
                 <div class="card-date">{{ formatDate(card.created_at) }}</div>
               </div>
               <div class="card-actions" v-if="editingCardId !== card.id">
+                <button class="card-btn note-btn" @click.stop="toggleNote(card)" title="덧글">
+                  📝
+                </button>
                 <button class="card-btn move-btn" @click.stop="moveCard(card, getNextColumn(col.id))" title="다음 컬럼으로 이동">
                   →
                 </button>
                 <button class="card-btn delete-btn" @click.stop="deleteCard(card.id)" title="삭제">
                   ×
                 </button>
+              </div>
+              <div v-if="showNoteCardId === card.id && editingCardId !== card.id" class="note-area">
+                <textarea
+                  v-model="card.note"
+                  class="note-input"
+                  rows="2"
+                  placeholder="덧글을 입력하세요..."
+                  @blur="saveNote(card)"
+                  @keydown.enter.exact.prevent="saveNote(card)"
+                ></textarea>
               </div>
             </template>
           </div>
@@ -148,12 +161,14 @@ const editingCardId = ref(null)
 const editTitle = ref('')
 const editDescription = ref('')
 const editInput = ref(null)
+const showNoteCardId = ref(null)
 
 const sampleSql = `-- Supabase SQL Editor에서 실행하세요
 CREATE TABLE IF NOT EXISTS kanban_cards (
   id BIGSERIAL PRIMARY KEY,
   title TEXT NOT NULL,
   description TEXT,
+  note TEXT,
   status TEXT NOT NULL DEFAULT 'todo',
   position INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -242,6 +257,7 @@ async function addCard(status) {
   const newCard = {
     title,
     description: '',
+    note: '',
     status,
     position: maxPos + 1,
     created_at: new Date().toISOString()
@@ -359,6 +375,33 @@ async function saveEdit(card) {
     showToast('수정 실패: ' + e.message)
   }
   cancelEdit()
+}
+
+function toggleNote(card) {
+  if (showNoteCardId.value === card.id) {
+    saveNote(card)
+    showNoteCardId.value = null
+  } else {
+    showNoteCardId.value = card.id
+  }
+}
+
+async function saveNote(card) {
+  try {
+    if (usingSupabase.value) {
+      const { error } = await supabase
+        .from('kanban_cards')
+        .update({ note: card.note || '', updated_at: new Date().toISOString() })
+        .eq('id', card.id)
+      if (error) throw error
+    } else {
+      saveLocal()
+    }
+    showToast('덧글이 저장되었습니다.')
+  } catch (e) {
+    showToast('저장 실패: ' + e.message)
+  }
+  showNoteCardId.value = null
 }
 
 function onDragStart(cardId) {
@@ -566,6 +609,30 @@ onMounted(loadCards)
   display: flex;
   flex-direction: column;
   width: 100%;
+}
+
+.note-area {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.note-input {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  line-height: 1.4;
+  color: #6b7280;
+  background: #f9fafb;
+}
+.note-input:focus {
+  border-color: #3b82f6;
+  background: white;
 }
 
 .add-card-area {
