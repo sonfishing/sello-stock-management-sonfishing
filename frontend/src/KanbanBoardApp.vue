@@ -86,23 +86,26 @@
               </div>
             </template>
             <template v-else>
-              <div class="card-content">
-                <div class="card-title">{{ card.title }}</div>
-                <div v-if="card.description" class="card-description">{{ card.description }}</div>
-                <div class="card-date">{{ formatDate(card.created_at) }}</div>
+              <div class="card-main">
+                <div class="card-content">
+                  <div class="card-title">{{ card.title }}</div>
+                  <div v-if="card.description" class="card-description">{{ card.description }}</div>
+                  <div v-if="card.note" class="card-note">{{ card.note }}</div>
+                  <div class="card-date">{{ formatDate(card.created_at) }}</div>
+                </div>
+                <div class="card-actions" v-if="editingCardId !== card.id">
+                  <button class="card-btn note-btn" @click.stop="toggleNote(card)" title="덧글">
+                    📝
+                  </button>
+                  <button class="card-btn move-btn" @click.stop="moveCard(card, getNextColumn(col.id))" title="다음 컬럼으로 이동">
+                    →
+                  </button>
+                  <button class="card-btn delete-btn" @click.stop="deleteCard(card.id)" title="삭제">
+                    ×
+                  </button>
+                </div>
               </div>
-              <div class="card-actions" v-if="editingCardId !== card.id">
-                <button class="card-btn note-btn" @click.stop="toggleNote(card)" title="덧글">
-                  📝
-                </button>
-                <button class="card-btn move-btn" @click.stop="moveCard(card, getNextColumn(col.id))" title="다음 컬럼으로 이동">
-                  →
-                </button>
-                <button class="card-btn delete-btn" @click.stop="deleteCard(card.id)" title="삭제">
-                  ×
-                </button>
-              </div>
-              <div v-if="showNoteCardId === card.id && editingCardId !== card.id" class="note-area">
+              <div v-if="showNoteCardId === card.id" class="note-area">
                 <textarea
                   v-model="card.note"
                   class="note-input"
@@ -537,13 +540,19 @@ onMounted(loadCards)
   cursor: grab;
   transition: box-shadow 0.2s, opacity 0.2s;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   min-height: 42px;
 }
 .kanban-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 .kanban-card.dragging { opacity: 0.4; }
+
+.card-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
 
 .card-content {
   flex: 1;
@@ -562,6 +571,16 @@ onMounted(loadCards)
   color: #6b7280;
   line-height: 1.4;
   margin-top: 2px;
+}
+
+.card-note {
+  font-size: 12px;
+  color: #3b82f6;
+  line-height: 1.4;
+  margin-top: 2px;
+  background: #eff6ff;
+  padding: 4px 8px;
+  border-radius: 4px;
 }
 
 .card-date {
