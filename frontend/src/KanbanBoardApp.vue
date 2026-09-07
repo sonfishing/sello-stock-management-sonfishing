@@ -21,7 +21,16 @@
     <div class="kanban-header">
       <h1>📋 칸반 보드</h1>
       <div class="header-actions">
-        <span class="card-count">전체 {{ allCards.length }}개</span>
+        <div class="search-box">
+          <input
+            v-model="searchQuery"
+            class="search-input"
+            placeholder="검색어를 입력하세요..."
+            @keydown.enter="onSearch"
+          />
+          <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">×</button>
+        </div>
+        <span class="card-count">{{ searchQuery.trim() ? '검색 결과 ' + allCards.filter(c => (c.title||'').toLowerCase().includes(searchQuery.trim().toLowerCase()) || (c.description||'').toLowerCase().includes(searchQuery.trim().toLowerCase()) || (c.note||'').toLowerCase().includes(searchQuery.trim().toLowerCase())).length + '개' : '전체 ' + allCards.length + '개' }}</span>
         <button class="refresh-btn" @click="loadCards" :disabled="loading">
           {{ loading ? '로딩...' : '새로고침' }}
         </button>
@@ -156,6 +165,7 @@ const toast = ref('')
 const usingSupabase = ref(true)
 
 const newCardTitles = ref({ todo: '', in_progress: '', done: '' })
+const searchQuery = ref('')
 
 const dragCardId = ref(null)
 const dragOverColumn = ref(null)
@@ -184,7 +194,17 @@ CREATE POLICY "Allow all" ON kanban_cards
   FOR ALL USING (true) WITH CHECK (true);`
 
 const sortedCards = computed(() => {
-  return [...allCards.value].sort((a, b) => {
+  let result = allCards.value
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.trim().toLowerCase()
+    result = result.filter(c =>
+      (c.title || '').toLowerCase().includes(q) ||
+      (c.description || '').toLowerCase().includes(q) ||
+      (c.note || '').toLowerCase().includes(q) ||
+      (c.manage_code || '').toLowerCase().includes(q)
+    )
+  }
+  return result.sort((a, b) => {
     if (a.status !== b.status) {
       const order = { todo: 0, in_progress: 1, done: 2 }
       return (order[a.status] || 0) - (order[b.status] || 0)
@@ -195,6 +215,10 @@ const sortedCards = computed(() => {
 
 function getColumnCards(colId) {
   return sortedCards.value.filter(c => c.status === colId)
+}
+
+function onSearch() {
+  // 검색어로 필터링이 자동으로 적용됨
 }
 
 function getNextColumn(currentId) {
@@ -454,6 +478,47 @@ onMounted(loadCards)
 }
 .kanban-header h1 { margin: 0; font-size: 1.5rem; }
 .header-actions { display: flex; gap: 12px; align-items: center; }
+.search-box {
+  display: flex;
+  align-items: center;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0 8px;
+  transition: border-color 0.2s;
+}
+.search-box:focus-within {
+  border-color: #3b82f6;
+  background: white;
+}
+.search-input {
+  border: none;
+  background: transparent;
+  padding: 6px 8px;
+  font-size: 13px;
+  outline: none;
+  width: 200px;
+  color: #1f2937;
+  font-family: inherit;
+}
+.search-input::placeholder {
+  color: #9ca3af;
+}
+.search-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: #9ca3af;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.search-clear:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 .card-count { color: #6b7280; font-size: 14px; }
 .refresh-btn {
   padding: 6px 14px;
