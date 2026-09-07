@@ -256,11 +256,20 @@ async function loadCards() {
       allCards.value = saved ? JSON.parse(saved) : []
     }
   } catch (e) {
-    if (e.message?.includes('does not exist') || e.message?.includes('relation') || e.code === '42P01') {
+    const msg = e.message || ''
+    if (
+      msg.includes('does not exist') ||
+      msg.includes('relation') ||
+      e.code === '42P01' ||
+      msg.includes('No API key') ||
+      msg.includes('token') ||
+      msg.includes('403') ||
+      msg.includes('auth')
+    ) {
       usingSupabase.value = false
       const saved = localStorage.getItem('kanban_cards')
       allCards.value = saved ? JSON.parse(saved) : []
-      showToast('Supabase 테이블이 없어 로컬 저장 모드로 동작합니다.')
+      showToast('Supabase 연결 실패 → 로컬 모드로 동작합니다.')
     } else {
       showToast('로딩 실패: ' + e.message)
     }
@@ -304,7 +313,11 @@ async function addCard(status) {
       saveLocal()
     }
   } catch (e) {
-    if (e.message?.includes('does not exist') || e.message?.includes('relation') || e.code === '42P01') {
+    const msg = e.message || ''
+    if (
+      msg.includes('does not exist') || msg.includes('relation') || e.code === '42P01' ||
+      msg.includes('No API key') || msg.includes('token') || msg.includes('403') || msg.includes('auth')
+    ) {
       usingSupabase.value = false
       newCard.id = Date.now()
       allCards.value.push(newCard)
@@ -329,7 +342,15 @@ async function deleteCard(id) {
     if (!usingSupabase.value) saveLocal()
     showToast('삭제되었습니다.')
   } catch (e) {
-    showToast('삭제 실패: ' + e.message)
+    const msg = e.message || ''
+    if (msg.includes('No API key') || msg.includes('token') || msg.includes('403') || msg.includes('auth')) {
+      usingSupabase.value = false
+      allCards.value = allCards.value.filter(c => c.id !== id)
+      saveLocal()
+      showToast('삭제되었습니다.')
+    } else {
+      showToast('삭제 실패: ' + e.message)
+    }
   }
 }
 
@@ -354,7 +375,13 @@ async function moveCard(card, newStatus) {
       saveLocal()
     }
   } catch (e) {
-    showToast('이동 실패: ' + e.message)
+    const msg = e.message || ''
+    if (msg.includes('No API key') || msg.includes('token') || msg.includes('403') || msg.includes('auth')) {
+      usingSupabase.value = false
+      saveLocal()
+    } else {
+      showToast('이동 실패: ' + e.message)
+    }
   }
 }
 
@@ -399,7 +426,13 @@ async function saveEdit(card) {
       saveLocal()
     }
   } catch (e) {
-    showToast('수정 실패: ' + e.message)
+    const msg = e.message || ''
+    if (msg.includes('No API key') || msg.includes('token') || msg.includes('403') || msg.includes('auth')) {
+      usingSupabase.value = false
+      saveLocal()
+    } else {
+      showToast('수정 실패: ' + e.message)
+    }
   }
   cancelEdit()
 }
@@ -426,7 +459,14 @@ async function saveNote(card) {
     }
     showToast('덧글이 저장되었습니다.')
   } catch (e) {
-    showToast('저장 실패: ' + e.message)
+    const msg = e.message || ''
+    if (msg.includes('No API key') || msg.includes('token') || msg.includes('403') || msg.includes('auth')) {
+      usingSupabase.value = false
+      saveLocal()
+      showToast('덧글이 저장되었습니다.')
+    } else {
+      showToast('저장 실패: ' + e.message)
+    }
   }
   showNoteCardId.value = null
 }
