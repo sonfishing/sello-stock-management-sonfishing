@@ -14,7 +14,8 @@ export default defineConfig({
         zerostock: resolve(__dirname, '0stock.html'),
         sscodestock: resolve(__dirname, 'ss_code_stock.html'),
         cstodolist: resolve(__dirname, 'cs_todolist.html'),
-        kanban: resolve(__dirname, 'kanban.html')
+        kanban: resolve(__dirname, 'kanban.html'),
+        todolist: resolve(__dirname, 'todolist.html')
       }
     }
   }

@@ -19,16 +19,16 @@
           <span class="icon">📤</span>출고
         </a>
         <a href="todolist.html" class="nav-link">
-          <span class="icon">📝</span>메모장
+          <span class="icon">📚</span>지식 라이브러리
         </a>
         <a href="ss_code_stock.html" class="nav-link active">
           <span class="icon">🏪</span>스마트스토어 재고변경
         </a>
         <a href="cs_todolist.html" class="nav-link">
-          <span class="icon">💬</span>CS 투두리스트
+          <span class="icon">📋</span>해야할일
         </a>
         <a href="kanban.html" class="nav-link">
-          <span class="icon">📋</span>칸반 보드
+          <span class="icon">💬</span>CS처리
         </a>
       </nav>
     </div>
