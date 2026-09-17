@@ -13,6 +13,7 @@
         <a href="todolist.html" class="nav-link"><span class="icon">📝</span>메모장</a>
         <a href="ss_code_stock.html" class="nav-link"><span class="icon">🏪</span>스마트스토어 재고변경</a>
         <a href="cs_todolist.html" class="nav-link active"><span class="icon">💬</span>CS 투두리스트</a>
+        <a href="kanban.html" class="nav-link"><span class="icon">📋</span>칸반 보드</a>
       </nav>
     </div>
   </div>
