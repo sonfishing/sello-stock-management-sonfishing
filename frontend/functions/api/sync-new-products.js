@@ -4,7 +4,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type'
 }
 
-const DEFAULT_RELAY_URL = 'https://relay.sonfishing.co.kr'
+const DEFAULT_RELAY_URL = 'https://tfc.ipdisk.co.kr/sonfishing_naver_api.php'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -22,7 +22,7 @@ export async function onRequest(context) {
   }
 
   try {
-    const res = await fetch(relayUrl + '/sync-new-products', {
+    const res = await fetch(relayUrl + '?action=sync-new-products', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({})

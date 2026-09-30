@@ -4,7 +4,7 @@ compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "dist"
 
 [vars]
-RELAY_URL = "https://relay.sonfishing.co.kr"
+RELAY_URL = "https://tfc.ipdisk.co.kr/sonfishing_naver_api.php"
 
 [[kv_namespaces]]
 binding = "CS_MESSAGES"

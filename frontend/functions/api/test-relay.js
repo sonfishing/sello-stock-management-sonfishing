@@ -4,7 +4,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type'
 }
 
-const DEFAULT_RELAY_URL = 'https://relay.sonfishing.co.kr'
+const DEFAULT_RELAY_URL = 'https://tfc.ipdisk.co.kr/sonfishing_naver_api.php'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -16,7 +16,7 @@ export async function onRequest(context) {
 
   try {
     const start = Date.now()
-    const res = await fetch(relayUrl + '/test-naver')
+    const res = await fetch(relayUrl + '?action=test-naver')
     const bodyText = await res.text()
     const elapsed = (Date.now() - start) + 'ms'
 
@@ -31,7 +31,7 @@ export async function onRequest(context) {
           httpStatus: res.status,
           httpStatusText: res.statusText,
           body: bodyText.substring(0, 300),
-          relayUrl: relayUrl + '/test-naver'
+          relayUrl: relayUrl + '?action=test-naver'
         }
       }), { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } })
     }
@@ -45,7 +45,7 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({
       success: false,
       message: e.message,
-      relayUrl: relayUrl + '/test-naver'
+      relayUrl: relayUrl + '?action=test-naver'
     }), { headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } })
   }
 }
