@@ -4,7 +4,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type'
 }
 
-const DEFAULT_RELAY_URL = 'https://tfc.ipdisk.co.kr/sonfishing_naver_api.php'
+const DEFAULT_RELAY_URL = 'http://tfc.ipdisk.co.kr/sonfishing_naver_api.php'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -26,7 +26,7 @@ export async function onRequest(context) {
     } catch (parseErr) {
       return new Response(JSON.stringify({
         success: false,
-        message: '릴레이 응답이 JSON이 아님',
+        message: '릴레???�답??JSON???�님',
         diag: {
           httpStatus: res.status,
           httpStatusText: res.statusText,

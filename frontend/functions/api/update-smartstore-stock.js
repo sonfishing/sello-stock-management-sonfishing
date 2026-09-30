@@ -4,7 +4,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type'
 }
 
-const DEFAULT_RELAY_URL = 'https://tfc.ipdisk.co.kr/sonfishing_naver_api.php'
+const DEFAULT_RELAY_URL = 'http://tfc.ipdisk.co.kr/sonfishing_naver_api.php'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -25,7 +25,7 @@ export async function onRequest(context) {
     const { product, newStockQuantity } = await request.json()
 
     if (!product || newStockQuantity === undefined) {
-      return new Response(JSON.stringify({ success: false, message: '필수 파라미터 누락' }), {
+      return new Response(JSON.stringify({ success: false, message: '?�수 ?�라미터 ?�락' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       })

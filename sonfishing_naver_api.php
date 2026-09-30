@@ -38,7 +38,9 @@ function json_out($data, $code = 200) {
 }
 
 function get_access_token() {
-    $timestamp = (string)((int)round(microtime(true) * 1000));
+    // 32비트 PHP에서 (int) 캐스팅 시 오버플로우로 과거 시간이 되는 문제 방지
+    // (float 를 정수형 문자열로 그대로 변환)
+    $timestamp = sprintf('%.0f', round(microtime(true) * 1000));
     $password = CLIENT_ID . '_' . $timestamp;
 
     // bcrypt 해시 생성 (시크릿 자체를 bcrypt salt 로 사용)
@@ -305,7 +307,12 @@ switch ($action) {
         action_sync_new_products();
         break;
     case 'health':
-        json_out(array('status' => 'ok'));
+        json_out(array(
+            'status' => 'ok',
+            'server_time' => date('Y-m-d H:i:s'),
+            'server_time_ms' => sprintf('%.0f', round(microtime(true) * 1000)),
+            'php_int_size' => PHP_INT_SIZE,
+        ));
         break;
     default:
         json_out(array(
