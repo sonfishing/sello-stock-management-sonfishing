@@ -99,11 +99,12 @@
               <table class="product-table">
               <thead>
                 <tr>
-                  <th style="width: 22%;">상품명</th>
-                  <th style="width: 18%;">옵션명</th>
+                  <th style="width: 11%;">원상품코드</th>
+                  <th style="width: 17%;">상품명</th>
+                  <th style="width: 14%;">옵션명</th>
                   <th style="width: 7%; text-align: center;">기본가</th>
                   <th style="width: 7%; text-align: center;">옵션가</th>
-                  <th style="width: 9%;">분류</th>
+                  <th style="width: 8%;">분류</th>
                   <th style="width: 7%; text-align: center;">재고</th>
                   <th style="width: 8%;">상태</th>
                   <th style="width: 10%;">진열</th>
@@ -115,6 +116,9 @@
                 <tr v-for="product in products" :key="product.id"
                     class="premium-row"
                     :class="{ 'row-modified': modifiedRows.has(product.id), 'row-completed': completedRows.has(product.id) }">
+                  <td>
+                    <div class="padding-cell code-cell">{{ product.origin_product_no || '-' }}</div>
+                  </td>
                   <td>
                     <div class="padding-cell text-content">{{ product.name || '-' }}</div>
                   </td>
@@ -520,6 +524,12 @@ async function testRelay() {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 280px;
+}
+
+.code-cell {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .qty-input {
