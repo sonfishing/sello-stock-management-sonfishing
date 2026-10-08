@@ -520,6 +520,27 @@ function get_all_product_ids_php($token) {
     return $ids;
 }
 
+function load_known_product_ids() {
+    // PHP 파일과 같은 디렉토리의 known_products.txt 를 시드 목록으로 읽음 (있으면)
+    // 검색 API 인덱스에서 누락되는 상품을 보완하기 위한 용도
+    // (스마트스토어 관리자 -> 상품관리 -> 엑셀 다운로드 의 상품번호 목록)
+    $ids = array();
+    $path = __DIR__ . '/known_products.txt';
+    if (file_exists($path)) {
+        $content = file_get_contents($path);
+        if ($content !== false) {
+            $tokens = preg_split('/[\r\n,]+/', $content);
+            foreach ($tokens as $tok) {
+                $tok = trim($tok);
+                if ($tok !== '' && ctype_digit($tok)) {
+                    $ids[] = $tok;
+                }
+            }
+        }
+    }
+    return array_values(array_unique($ids));
+}
+
 function fetch_channel_product($token, $originNo) {
     list($code, $data, $raw) = api_request('GET', "https://api.commerce.naver.com/external/v2/products/channel-products/{$originNo}", $token);
     if ($code === 200) {
@@ -623,8 +644,10 @@ function action_sync_new_products() {
 
         $token = get_access_token();
 
-        // [1단계] 스토어 전체 상품번호 조회
+        // [1단계] 스토어 전체 상품번호 조회 + 시드 파일(known_products.txt) 병합
         $apiIds = get_all_product_ids_php($token);
+        $knownIds = load_known_product_ids();
+        $candidates = array_keys(array_flip(array_merge($apiIds, $knownIds)));
 
         // [2단계] Supabase 저장된 원상품코드와 비교하여 신규만 추출
         $savedIds = sb_get_saved_origin_nos();
@@ -632,14 +655,14 @@ function action_sync_new_products() {
 
         $newIds = array();
         $savedCount = 0;
-        foreach ($apiIds as $id) {
+        foreach ($candidates as $id) {
             if (isset($savedSet[$id])) {
                 $savedCount++;
             } else {
                 $newIds[] = $id;
             }
         }
-        $summary = '스토어 전체: ' . count($apiIds) . '개 | Supabase 저장됨: ' . $savedCount . '개 | 신규: ' . count($newIds) . '개';
+        $summary = '스토어 전체: ' . count($apiIds) . '개 | 시드 파일: ' . count($knownIds) . '개 | Supabase 저장됨: ' . $savedCount . '개 | 신규: ' . count($newIds) . '개';
 
         if (count($newIds) === 0) {
             $response = array(
@@ -704,16 +727,23 @@ function action_sync_all() {
 
         $token = get_access_token();
 
-        // [1단계] 스토어 전체 상품번호 조회
+        // [1단계] 전체 상품번호 수집 (검색 API + 시드 파일 + Supabase 기존 데이터 병합)
         $apiIds = get_all_product_ids_php($token);
+        $knownIds = load_known_product_ids();
+        try {
+            $savedIds = sb_get_saved_origin_nos();
+        } catch (Exception $e) {
+            $savedIds = array();
+        }
+        $allIds = array_values(array_unique(array_merge($apiIds, $knownIds, $savedIds)));
 
         // [2단계] 전체 상품 상세 정보 병렬 수집 (기존 상품 포함 - 네이버 기준으로 갱신)
-        $details = fetch_details_parallel($token, $apiIds, DETAIL_CONCURRENCY);
+        $details = fetch_details_parallel($token, $allIds, DETAIL_CONCURRENCY);
 
         // [3단계] 파싱
         $dbRows = array();
         $failIds = array();
-        foreach ($apiIds as $pid) {
+        foreach ($allIds as $pid) {
             if (isset($details[$pid])) {
                 foreach (parse_product_rows($pid, $details[$pid]) as $r) {
                     $dbRows[] = $r;
@@ -728,7 +758,7 @@ function action_sync_all() {
         $inserted = count($dbRows) > 0 ? sb_insert_rows(rows_to_db_dicts($dbRows)) : 0;
 
         $elapsed = (int)((round(microtime(true) * 1000) - $start) / 1000);
-        $msg = '스토어 전체: ' . count($apiIds) . '개 상품 | ' . count($dbRows) . '행 처리 (Supabase ' . $inserted . '행 삽입, ' . $elapsed . '초 소요)';
+        $msg = '스토어 전체: ' . count($allIds) . '개 상품 | ' . count($dbRows) . '행 처리 (Supabase ' . $inserted . '행 삽입, ' . $elapsed . '초 소요)';
         if (count($failIds) > 0) {
             $msg .= "\n" . '조회 실패: ' . implode(', ', $failIds);
         }
