@@ -47,6 +47,9 @@
         <button class="menu-btn sync-new-btn" @click="syncNewProducts" :disabled="syncingNew">
           {{ syncingNew ? '업데이트 중...' : '스마트스토어 최신 상품 업데이트' }}
         </button>
+        <button class="menu-btn sync-all-btn" @click="syncAllProducts" :disabled="syncingAll">
+          {{ syncingAll ? '갱신 중... (1~2분)' : '스마트스토어 전체 갱신' }}
+        </button>
       </div>
       <div class="right-actions">
         <div class="search-box">
@@ -206,6 +209,10 @@
     <strong>스마트스토어 최신 상품 업데이트</strong><br>
     {{ syncResult.message }}
   </div>
+  <div v-if="syncAllResult" class="test-result sync-result" :class="{ success: syncAllResult.success, fail: !syncAllResult.success }">
+    <strong>스마트스토어 전체 갱신</strong><br>
+    {{ syncAllResult.message }}
+  </div>
 </template>
 
 <script setup>
@@ -230,6 +237,8 @@ const testingRelay = ref(false)
 const testResult = ref(null)
 const syncingNew = ref(false)
 const syncResult = ref(null)
+const syncingAll = ref(false)
+const syncAllResult = ref(null)
 
 function showToast(msg) {
   toastMessage.value = msg
@@ -423,6 +432,26 @@ async function syncNewProducts() {
   } finally {
     syncingNew.value = false
     setTimeout(() => { syncResult.value = null }, 15000)
+  }
+}
+
+async function syncAllProducts() {
+  syncingAll.value = true
+  syncAllResult.value = null
+  try {
+    const res = await fetch('/api/sync-all-products', { method: 'POST' })
+    const data = await res.json()
+
+    if (data.success) {
+      syncAllResult.value = { success: true, message: data.message || '완료되었습니다.' }
+    } else {
+      syncAllResult.value = { success: false, message: '갱신 실패: ' + (data.message || data.error || '알 수 없는 오류') }
+    }
+  } catch (e) {
+    syncAllResult.value = { success: false, message: '요청 실패: ' + e.message }
+  } finally {
+    syncingAll.value = false
+    setTimeout(() => { syncAllResult.value = null }, 15000)
   }
 }
 
@@ -676,6 +705,27 @@ async function testRelay() {
   background: #d97706;
 }
 .sync-new-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sync-all-btn {
+  margin-left: 12px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #6366f1;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  white-space: nowrap;
+}
+.sync-all-btn:hover:not(:disabled) {
+  background: #4f46e5;
+}
+.sync-all-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

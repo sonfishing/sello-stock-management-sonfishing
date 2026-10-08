@@ -32,6 +32,9 @@ define('SUPABASE_TABLE', 'smartstore_products');
 
 define('SYNC_LOCK_SECONDS', 600);
 
+// 전체 갱신 시 상세 정보 병렬 조회 개수
+define('DETAIL_CONCURRENCY', 10);
+
 function json_out($data, $code = 200) {
     http_response_code($code);
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
@@ -490,6 +493,103 @@ function action_test_naver() {
     }
 }
 
+function get_all_product_ids_php($token) {
+    $ids = array();
+    $page = 1;
+    while (true) {
+        list($c, $data, $raw) = api_request(
+            'POST',
+            'https://api.commerce.naver.com/external/v1/products/search',
+            $token,
+            array('page' => $page, 'size' => 100)
+        );
+        if ($c !== 200) {
+            break;
+        }
+        $contents = isset($data['contents']) ? $data['contents'] : array();
+        if (count($contents) === 0) {
+            break;
+        }
+        foreach ($contents as $p) {
+            if (!empty($p['originProductNo'])) {
+                $ids[] = (string)$p['originProductNo'];
+            }
+        }
+        $page++;
+    }
+    return $ids;
+}
+
+function fetch_channel_product($token, $originNo) {
+    list($code, $data, $raw) = api_request('GET', "https://api.commerce.naver.com/external/v2/products/channel-products/{$originNo}", $token);
+    if ($code === 200) {
+        return $data;
+    }
+    return null;
+}
+
+function fetch_details_parallel($token, $ids, $concurrency = 10) {
+    $all = array();
+    $total = count($ids);
+    for ($offset = 0; $offset < $total; $offset += $concurrency) {
+        $chunk = array_slice($ids, $offset, $concurrency);
+        $mh = curl_multi_init();
+        $handles = array();
+        foreach ($chunk as $pid) {
+            $ch = curl_init("https://api.commerce.naver.com/external/v2/products/origin-products/{$pid}");
+            curl_setopt_array($ch, array(
+                CURLOPT_HTTPHEADER => array('Authorization: Bearer ' . $token),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 30,
+            ));
+            curl_multi_add_handle($mh, $ch);
+            $handles[$pid] = $ch;
+        }
+
+        do {
+            $mstatus = curl_multi_exec($mh, $active);
+            if ($active) {
+                curl_multi_select($mh, 0.2);
+            }
+        } while ($active && $mstatus === CURLM_OK);
+
+        foreach ($handles as $pid => $ch) {
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $res = curl_multi_getcontent($ch);
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+            if ($httpCode === 200 && $res !== false && $res !== null) {
+                $all[$pid] = json_decode($res, true);
+            } else {
+                // 실패 시 채널 상품 폴백
+                $data = fetch_channel_product($token, $pid);
+                if ($data !== null) {
+                    $all[$pid] = $data;
+                }
+            }
+        }
+        curl_multi_close($mh);
+    }
+    return $all;
+}
+
+function sb_delete_all() {
+    $url = SUPABASE_URL . '/rest/v1/' . SUPABASE_TABLE . '?id=neq.0';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, array(
+        CURLOPT_CUSTOMREQUEST => 'DELETE',
+        CURLOPT_HTTPHEADER => sb_headers(),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 120,
+    ));
+    $res = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($res === false || $code >= 300) {
+        throw new Exception('Supabase 기존 데이터 삭제 실패: ' . $code);
+    }
+}
+
 function action_update_stock() {
     try {
         $input = json_decode(file_get_contents('php://input'), true);
@@ -524,29 +624,7 @@ function action_sync_new_products() {
         $token = get_access_token();
 
         // [1단계] 스토어 전체 상품번호 조회
-        $apiIds = array();
-        $page = 1;
-        while (true) {
-            list($c, $data, $raw) = api_request(
-                'POST',
-                'https://api.commerce.naver.com/external/v1/products/search',
-                $token,
-                array('page' => $page, 'size' => 100)
-            );
-            if ($c !== 200) {
-                break;
-            }
-            $contents = isset($data['contents']) ? $data['contents'] : array();
-            if (count($contents) === 0) {
-                break;
-            }
-            foreach ($contents as $p) {
-                if (!empty($p['originProductNo'])) {
-                    $apiIds[] = (string)$p['originProductNo'];
-                }
-            }
-            $page++;
-        }
+        $apiIds = get_all_product_ids_php($token);
 
         // [2단계] Supabase 저장된 원상품코드와 비교하여 신규만 추출
         $savedIds = sb_get_saved_origin_nos();
@@ -607,6 +685,62 @@ function action_sync_new_products() {
     json_out($response, $code);
 }
 
+function action_sync_all() {
+    // 동시 실행 방지 (sync-new 와 같은 락 공유)
+    $lockFile = sys_get_temp_dir() . '/ss_sync_new.lock';
+    if (file_exists($lockFile) && (time() - filemtime($lockFile)) < SYNC_LOCK_SECONDS) {
+        json_out(array(
+            'success' => false,
+            'message' => '이미 동기화가 실행 중입니다. 잠시 후 다시 시도하세요.',
+        ), 409);
+    }
+    touch($lockFile);
+
+    $response = null;
+    $code = 200;
+    try {
+        set_time_limit(0);
+        $start = round(microtime(true) * 1000);
+
+        $token = get_access_token();
+
+        // [1단계] 스토어 전체 상품번호 조회
+        $apiIds = get_all_product_ids_php($token);
+
+        // [2단계] 전체 상품 상세 정보 병렬 수집 (기존 상품 포함 - 네이버 기준으로 갱신)
+        $details = fetch_details_parallel($token, $apiIds, DETAIL_CONCURRENCY);
+
+        // [3단계] 파싱
+        $dbRows = array();
+        $failIds = array();
+        foreach ($apiIds as $pid) {
+            if (isset($details[$pid])) {
+                foreach (parse_product_rows($pid, $details[$pid]) as $r) {
+                    $dbRows[] = $r;
+                }
+            } else {
+                $failIds[] = $pid;
+            }
+        }
+
+        // [4단계] Supabase 전체 교체 (기존 데이터 삭제 후 재삽입)
+        sb_delete_all();
+        $inserted = count($dbRows) > 0 ? sb_insert_rows(rows_to_db_dicts($dbRows)) : 0;
+
+        $elapsed = (int)((round(microtime(true) * 1000) - $start) / 1000);
+        $msg = '스토어 전체: ' . count($apiIds) . '개 상품 | ' . count($dbRows) . '행 처리 (Supabase ' . $inserted . '행 삽입, ' . $elapsed . '초 소요)';
+        if (count($failIds) > 0) {
+            $msg .= "\n" . '조회 실패: ' . implode(', ', $failIds);
+        }
+        $response = array('success' => true, 'message' => $msg);
+    } catch (Exception $e) {
+        $response = array('success' => false, 'message' => $e->getMessage());
+        $code = 500;
+    }
+    @unlink($lockFile);
+    json_out($response, $code);
+}
+
 $action = isset($_GET['action']) ? $_GET['action'] : '';
 switch ($action) {
     case 'test-naver':
@@ -617,6 +751,9 @@ switch ($action) {
         break;
     case 'sync-new-products':
         action_sync_new_products();
+        break;
+    case 'sync-all':
+        action_sync_all();
         break;
     case 'my-ip':
         $ip = get_outbound_ip();
