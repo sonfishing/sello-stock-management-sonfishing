@@ -48,7 +48,7 @@
           {{ syncingNew ? '업데이트 중...' : '스마트스토어 최신 상품 업데이트' }}
         </button>
         <button class="menu-btn sync-all-btn" @click="syncAllProducts" :disabled="syncingAll">
-          {{ syncingAll ? '갱신 중... (1~2분)' : '스마트스토어 전체 갱신' }}
+          {{ syncingAll ? (syncProgress || '갱신 중...') : '스마트스토어 전체 갱신' }}
         </button>
       </div>
       <div class="right-actions">
@@ -239,6 +239,7 @@ const syncingNew = ref(false)
 const syncResult = ref(null)
 const syncingAll = ref(false)
 const syncAllResult = ref(null)
+const syncProgress = ref('')
 
 function showToast(msg) {
   toastMessage.value = msg
@@ -436,21 +437,46 @@ async function syncNewProducts() {
 }
 
 async function syncAllProducts() {
+  if (syncingAll.value) return
   syncingAll.value = true
   syncAllResult.value = null
+  syncProgress.value = ''
+  let netErrors = 0
+  const MAX_STEPS = 400
   try {
-    const res = await fetch('/api/sync-all-products', { method: 'POST' })
-    const data = await res.json()
+    for (let step = 0; step < MAX_STEPS; step++) {
+      let data
+      try {
+        const res = await fetch('/api/sync-all-products', { method: 'POST' })
+        data = await res.json()
+        netErrors = 0
+      } catch (e) {
+        // 네트워크 오류(타임아웃 등) -> 서버 체크포인트에서 이어지도록 재호출
+        netErrors++
+        if (netErrors > 5) {
+          syncAllResult.value = { success: false, message: '요청 실패: ' + e.message }
+          return
+        }
+        await new Promise(r => setTimeout(r, 2000))
+        continue
+      }
 
-    if (data.success) {
-      syncAllResult.value = { success: true, message: data.message || '완료되었습니다.' }
-    } else {
-      syncAllResult.value = { success: false, message: '갱신 실패: ' + (data.message || data.error || '알 수 없는 오류') }
+      if (!data.success) {
+        syncAllResult.value = { success: false, message: '갱신 실패: ' + (data.message || '알 수 없는 오류') }
+        return
+      }
+
+      syncProgress.value = data.progress || ''
+      if (data.done) {
+        syncAllResult.value = { success: true, message: data.message || '완료되었습니다.' }
+        return
+      }
+      await new Promise(r => setTimeout(r, 300))
     }
-  } catch (e) {
-    syncAllResult.value = { success: false, message: '요청 실패: ' + e.message }
+    syncAllResult.value = { success: false, message: '최대 단계를 초과했습니다.' }
   } finally {
     syncingAll.value = false
+    syncProgress.value = ''
     setTimeout(() => { syncAllResult.value = null }, 15000)
   }
 }

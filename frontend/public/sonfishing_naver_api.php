@@ -8,7 +8,10 @@
  *   GET  ?action=test-naver
  *   GET  ?action=my-ip               (서버 아웃바운드 IP 확인 - 네이버 IP 등록용)
  *   POST ?action=update-stock          body: {"product": {...}, "newStockQuantity": 10}
- *   POST ?action=sync-new-products     (python 불필요 - PHP가 네이버API+Supabase 직접 호출)
+ *   POST ?action=sync-new-products     (신규 상품만 추가)
+ *   POST ?action=sync-all              (전체 갱신 - 체크포인트 기반 단계 실행,
+ *                                       호출할 때마다 한 단계씩 처리하므로
+ *                                       호스트 타임아웃이 나도 다음 호출이 이어서 진행)
  *
  * 필요 확장: curl (표준), bcrypt 서명은 crypt() 내장 함수 사용
  */
@@ -32,8 +35,14 @@ define('SUPABASE_TABLE', 'smartstore_products');
 
 define('SYNC_LOCK_SECONDS', 600);
 
-// 전체 갱신 시 상세 정보 병렬 조회 개수
-define('DETAIL_CONCURRENCY', 10);
+// ---- 전체 갱신(sync-all) 체크포인트 설정 ----
+// 상태/수집데이터는 sys_get_temp_dir() 에 저장 (웹루트 쓰기권한 불필요)
+define('SYNC_TMP_DIR', sys_get_temp_dir() . '/ss_sync_all');
+define('SYNC_STATE_FILE', SYNC_TMP_DIR . '/state.json');
+define('SYNC_ROWS_DIR', SYNC_TMP_DIR . '/rows');
+define('COLLECT_CHUNK', 15);   // 단계당 상세 조회할 상품 수
+define('REPLACE_CHUNK', 10);   // 단계당 Supabase 반영할 상품 수
+define('STATE_EXPIRE_SECONDS', 3600);  // 상태 유효 시간(이후면 새 작업 시작)
 
 function json_out($data, $code = 200) {
     http_response_code($code);
@@ -54,7 +63,6 @@ function get_outbound_ip() {
             CURLOPT_TIMEOUT => 8,
         ));
         $res = curl_exec($ch);
-        $err = curl_error($ch);
         curl_close($ch);
         if ($res !== false) {
             $ip = trim((string)$res);
@@ -68,12 +76,10 @@ function get_outbound_ip() {
 
 function get_access_token() {
     // 32비트 PHP에서 (int) 캐스팅 시 오버플로우로 과거 시간이 되는 문제 방지
-    // (float 를 정수형 문자열로 그대로 변환)
     $timestamp = sprintf('%.0f', round(microtime(true) * 1000));
     $password = CLIENT_ID . '_' . $timestamp;
 
     // bcrypt 해시 생성 (시크릿 자체를 bcrypt salt 로 사용)
-    // CLIENT_SECRET($2a$04$...) 은 유효한 bcrypt salt 형식이므로 crypt() 에 그대로 전달
     $hashed = crypt($password, CLIENT_SECRET);
     if ($hashed === false || strlen($hashed) < 60) {
         throw new Exception('bcrypt 서명 생성 실패');
@@ -452,6 +458,284 @@ function sb_insert_rows($dicts) {
     return $inserted;
 }
 
+function get_all_product_ids_php($token) {
+    $ids = array();
+    $page = 1;
+    while (true) {
+        list($c, $data, $raw) = api_request(
+            'POST',
+            'https://api.commerce.naver.com/external/v1/products/search',
+            $token,
+            array('page' => $page, 'size' => 100)
+        );
+        if ($c !== 200) {
+            break;
+        }
+        $contents = isset($data['contents']) ? $data['contents'] : array();
+        if (count($contents) === 0) {
+            break;
+        }
+        foreach ($contents as $p) {
+            if (!empty($p['originProductNo'])) {
+                $ids[] = (string)$p['originProductNo'];
+            }
+        }
+        $page++;
+    }
+    return $ids;
+}
+
+function load_known_product_ids() {
+    // PHP 파일과 같은 디렉토리의 known_products.txt 를 시드 목록으로 읽음 (있으면)
+    $ids = array();
+    $path = __DIR__ . '/known_products.txt';
+    if (file_exists($path)) {
+        $content = file_get_contents($path);
+        if ($content !== false) {
+            $tokens = preg_split('/[\r\n,]+/', $content);
+            foreach ($tokens as $tok) {
+                $tok = trim($tok);
+                if ($tok !== '' && ctype_digit($tok)) {
+                    $ids[] = $tok;
+                }
+            }
+        }
+    }
+    return array_values(array_unique($ids));
+}
+
+// ============================================================
+// 전체 갱신(sync-all) - 체크포인트 기반 단계 실행
+// 한 번의 호출 = 한 단계. 호스트 타임아웃이 나도 상태 파일에서 이어서 진행.
+// ============================================================
+
+function sync_state_load() {
+    if (!file_exists(SYNC_STATE_FILE)) {
+        return null;
+    }
+    $raw = file_get_contents(SYNC_STATE_FILE);
+    if ($raw === false) {
+        return null;
+    }
+    $st = json_decode($raw, true);
+    if (!is_array($st)) {
+        return null;
+    }
+    return $st;
+}
+
+function sync_state_save($st) {
+    if (!is_dir(SYNC_TMP_DIR)) {
+        @mkdir(SYNC_TMP_DIR, 0777, true);
+    }
+    $st['updated'] = time();
+    $tmp = SYNC_STATE_FILE . '.tmp';
+    file_put_contents($tmp, json_encode($st, JSON_UNESCAPED_UNICODE));
+    rename($tmp, SYNC_STATE_FILE);
+}
+
+function sync_reset() {
+    if (!is_dir(SYNC_ROWS_DIR)) {
+        @mkdir(SYNC_ROWS_DIR, 0777, true);
+    } else {
+        foreach (glob(SYNC_ROWS_DIR . '/*.json') as $f) {
+            @unlink($f);
+        }
+    }
+    return array(
+        'phase' => 'init',
+        'collect_idx' => 0,
+        'insert_idx' => 0,
+        'fails' => array(),
+        'row_count' => 0,
+        'started' => time(),
+    );
+}
+
+function sync_progress_text($st) {
+    $phase = isset($st['phase']) ? $st['phase'] : '';
+    switch ($phase) {
+        case 'init':
+            return '상품번호 조회 중...';
+        case 'collect':
+            return '상세 수집 ' . (isset($st['collect_idx']) ? $st['collect_idx'] : 0) . '/' . count($st['all_ids']);
+        case 'insert':
+            return 'DB 반영 ' . (isset($st['insert_idx']) ? $st['insert_idx'] : 0) . '/' . count($st['all_ids']);
+        case 'cleanup':
+            return '정리 중...';
+        case 'done':
+            return '완료';
+    }
+    return '';
+}
+
+function sync_step_init(&$st) {
+    $token = get_access_token();
+    $ids = get_all_product_ids_php($token);
+    $known = load_known_product_ids();
+    $st['all_ids'] = array_values(array_unique(array_merge($ids, $known)));
+    $st['phase'] = 'collect';
+}
+
+function sync_step_collect(&$st) {
+    $ids = $st['all_ids'];
+    $total = count($ids);
+    $start = (int)$st['collect_idx'];
+    $end = min($start + COLLECT_CHUNK, $total);
+    $token = get_access_token();
+
+    for ($i = $start; $i < $end; $i++) {
+        $pid = $ids[$i];
+        $d = fetch_product_detail($token, $pid);
+        if ($d === null) {
+            $st['fails'][] = $pid;
+            continue;
+        }
+        $rows = parse_product_rows($pid, $d);
+        file_put_contents(
+            SYNC_ROWS_DIR . '/' . $pid . '.json',
+            json_encode($rows, JSON_UNESCAPED_UNICODE)
+        );
+        $st['row_count'] += count($rows);
+    }
+    $st['collect_idx'] = $end;
+    if ($end >= $total) {
+        $st['phase'] = 'insert';
+    }
+}
+
+function sync_step_insert(&$st) {
+    $ids = $st['all_ids'];
+    $total = count($ids);
+    $start = (int)$st['insert_idx'];
+    $end = min($start + REPLACE_CHUNK, $total);
+
+    for ($i = $start; $i < $end; $i++) {
+        $pid = $ids[$i];
+        $rowsFile = SYNC_ROWS_DIR . '/' . $pid . '.json';
+        if (!file_exists($rowsFile)) {
+            continue; // 수집 실패한 상품(삭제됨 등)
+        }
+        $rows = json_decode(file_get_contents($rowsFile), true);
+
+        // 해당 상품의 기존 행 삭제 후 삽입 (부분 교체 - 중간에 죽어도 다음 호출이 재처리)
+        $delUrl = SUPABASE_URL . '/rest/v1/' . SUPABASE_TABLE . '?origin_product_no=eq.' . $pid;
+        $ch = curl_init($delUrl);
+        curl_setopt_array($ch, array(
+            CURLOPT_CUSTOMREQUEST => 'DELETE',
+            CURLOPT_HTTPHEADER => sb_headers(),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+        ));
+        curl_exec($ch);
+        curl_close($ch);
+
+        if (is_array($rows) && count($rows) > 0) {
+            sb_insert_rows(rows_to_db_dicts($rows));
+        }
+    }
+    $st['insert_idx'] = $end;
+    if ($end >= $total) {
+        $st['phase'] = 'cleanup';
+    }
+}
+
+function sync_step_cleanup(&$st) {
+    // Supabase 에 남아있는 삭제된 상품 행 정리
+    $saved = sb_get_saved_origin_nos();
+    $current = array_flip($st['all_ids']);
+    $stale = array();
+    foreach ($saved as $ono) {
+        if (!isset($current[$ono])) {
+            $stale[] = $ono;
+        }
+    }
+
+    // 안전장치: 현재 목록이 기존의 절반 이하면 검색 오류 가능성 -> 정리 생략
+    if (count($st['all_ids']) < count($saved) * 0.5) {
+        $st['done_msg'] = '완료 (정리 생략: 조회된 상품 수가 기존보다 훨씬 적음)';
+        $st['phase'] = 'done';
+        return;
+    }
+
+    // 단계당 최대 50개씩 삭제 (타임아웃 방지)
+    $chunk = array_slice($stale, 0, 50);
+    foreach ($chunk as $ono) {
+        $delUrl = SUPABASE_URL . '/rest/v1/' . SUPABASE_TABLE . '?origin_product_no=eq.' . $ono;
+        $ch = curl_init($delUrl);
+        curl_setopt_array($ch, array(
+            CURLOPT_CUSTOMREQUEST => 'DELETE',
+            CURLOPT_HTTPHEADER => sb_headers(),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+        ));
+        curl_exec($ch);
+        curl_close($ch);
+    }
+
+    if (count($stale) > 50) {
+        return; // 다음 호출에서 계속 정리
+    }
+
+    $elapsed = time() - (isset($st['started']) ? $st['started'] : time());
+    $st['done_msg'] = '완료! 상품 ' . count($st['all_ids']) . '개 / ' . $st['row_count'] . '행 (' . $elapsed . '초 소요)'
+        . (count($st['fails']) > 0 ? "\n조회 실패: " . implode(', ', $st['fails']) : '');
+    $st['phase'] = 'done';
+}
+
+function action_sync_all() {
+    $st = sync_state_load();
+    $now = time();
+    $updated = isset($st['updated']) ? $st['updated'] : 0;
+    if ($st === null || (isset($st['phase']) && $st['phase'] === 'done') || (($now - $updated) > STATE_EXPIRE_SECONDS)) {
+        $st = sync_reset();
+    }
+
+    try {
+        switch ($st['phase']) {
+            case 'init':
+                sync_step_init($st);
+                break;
+            case 'collect':
+                sync_step_collect($st);
+                break;
+            case 'insert':
+                sync_step_insert($st);
+                break;
+            case 'cleanup':
+                sync_step_cleanup($st);
+                break;
+            case 'done':
+                // 완료 상태에서 다시 호출되면 새 작업 시작 (위에서 리셋됨)
+                break;
+            default:
+                $st = sync_reset();
+                sync_step_init($st);
+                break;
+        }
+    } catch (Exception $e) {
+        sync_state_save($st);
+        json_out(array(
+            'success' => false,
+            'done' => false,
+            'phase' => isset($st['phase']) ? $st['phase'] : '',
+            'progress' => sync_progress_text($st),
+            'message' => $e->getMessage(),
+        ), 500);
+    }
+
+    sync_state_save($st);
+    $done = ($st['phase'] === 'done');
+
+    json_out(array(
+        'success' => true,
+        'done' => $done,
+        'phase' => $st['phase'],
+        'progress' => sync_progress_text($st),
+        'message' => $done ? (isset($st['done_msg']) ? $st['done_msg'] : '완료') : '',
+    ));
+}
+
 function action_test_naver() {
     try {
         $token = get_access_token();
@@ -493,124 +777,6 @@ function action_test_naver() {
     }
 }
 
-function get_all_product_ids_php($token) {
-    $ids = array();
-    $page = 1;
-    while (true) {
-        list($c, $data, $raw) = api_request(
-            'POST',
-            'https://api.commerce.naver.com/external/v1/products/search',
-            $token,
-            array('page' => $page, 'size' => 100)
-        );
-        if ($c !== 200) {
-            break;
-        }
-        $contents = isset($data['contents']) ? $data['contents'] : array();
-        if (count($contents) === 0) {
-            break;
-        }
-        foreach ($contents as $p) {
-            if (!empty($p['originProductNo'])) {
-                $ids[] = (string)$p['originProductNo'];
-            }
-        }
-        $page++;
-    }
-    return $ids;
-}
-
-function load_known_product_ids() {
-    // PHP 파일과 같은 디렉토리의 known_products.txt 를 시드 목록으로 읽음 (있으면)
-    // 검색 API 인덱스에서 누락되는 상품을 보완하기 위한 용도
-    // (스마트스토어 관리자 -> 상품관리 -> 엑셀 다운로드 의 상품번호 목록)
-    $ids = array();
-    $path = __DIR__ . '/known_products.txt';
-    if (file_exists($path)) {
-        $content = file_get_contents($path);
-        if ($content !== false) {
-            $tokens = preg_split('/[\r\n,]+/', $content);
-            foreach ($tokens as $tok) {
-                $tok = trim($tok);
-                if ($tok !== '' && ctype_digit($tok)) {
-                    $ids[] = $tok;
-                }
-            }
-        }
-    }
-    return array_values(array_unique($ids));
-}
-
-function fetch_channel_product($token, $originNo) {
-    list($code, $data, $raw) = api_request('GET', "https://api.commerce.naver.com/external/v2/products/channel-products/{$originNo}", $token);
-    if ($code === 200) {
-        return $data;
-    }
-    return null;
-}
-
-function fetch_details_parallel($token, $ids, $concurrency = 10) {
-    $all = array();
-    $total = count($ids);
-    for ($offset = 0; $offset < $total; $offset += $concurrency) {
-        $chunk = array_slice($ids, $offset, $concurrency);
-        $mh = curl_multi_init();
-        $handles = array();
-        foreach ($chunk as $pid) {
-            $ch = curl_init("https://api.commerce.naver.com/external/v2/products/origin-products/{$pid}");
-            curl_setopt_array($ch, array(
-                CURLOPT_HTTPHEADER => array('Authorization: Bearer ' . $token),
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 30,
-            ));
-            curl_multi_add_handle($mh, $ch);
-            $handles[$pid] = $ch;
-        }
-
-        do {
-            $mstatus = curl_multi_exec($mh, $active);
-            if ($active) {
-                curl_multi_select($mh, 0.2);
-            }
-        } while ($active && $mstatus === CURLM_OK);
-
-        foreach ($handles as $pid => $ch) {
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $res = curl_multi_getcontent($ch);
-            curl_multi_remove_handle($mh, $ch);
-            curl_close($ch);
-            if ($httpCode === 200 && $res !== false && $res !== null) {
-                $all[$pid] = json_decode($res, true);
-            } else {
-                // 실패 시 채널 상품 폴백
-                $data = fetch_channel_product($token, $pid);
-                if ($data !== null) {
-                    $all[$pid] = $data;
-                }
-            }
-        }
-        curl_multi_close($mh);
-    }
-    return $all;
-}
-
-function sb_delete_all() {
-    $url = SUPABASE_URL . '/rest/v1/' . SUPABASE_TABLE . '?id=neq.0';
-    $ch = curl_init($url);
-    curl_setopt_array($ch, array(
-        CURLOPT_CUSTOMREQUEST => 'DELETE',
-        CURLOPT_HTTPHEADER => sb_headers(),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 120,
-    ));
-    $res = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if ($res === false || $code >= 300) {
-        throw new Exception('Supabase 기존 데이터 삭제 실패: ' . $code);
-    }
-}
-
 function action_update_stock() {
     try {
         $input = json_decode(file_get_contents('php://input'), true);
@@ -627,6 +793,16 @@ function action_update_stock() {
 }
 
 function action_sync_new_products() {
+    // 전체 갱신이 진행 중이면 중단
+    $stAll = sync_state_load();
+    $updated = isset($stAll['updated']) ? $stAll['updated'] : 0;
+    if ($stAll !== null && (isset($stAll['phase']) && $stAll['phase'] !== 'done') && ((time() - $updated) < STATE_EXPIRE_SECONDS)) {
+        json_out(array(
+            'success' => false,
+            'message' => '전체 갱신이 진행 중입니다. 완료 후 다시 시도하세요.',
+        ), 409);
+    }
+
     // 동시 실행 방지 (락 파일)
     $lockFile = sys_get_temp_dir() . '/ss_sync_new.lock';
     if (file_exists($lockFile) && (time() - filemtime($lockFile)) < SYNC_LOCK_SECONDS) {
@@ -673,9 +849,7 @@ function action_sync_new_products() {
             // [3단계] 신규 상품 상세 수집 후 Supabase 삽입
             $dbRows = array();
             $failIds = array();
-            $idx = 0;
             foreach ($newIds as $pid) {
-                $idx++;
                 $detail = fetch_product_detail($token, $pid);
                 if ($detail === null) {
                     $failIds[] = $pid;
@@ -700,69 +874,6 @@ function action_sync_new_products() {
                 'message' => $msg,
             );
         }
-    } catch (Exception $e) {
-        $response = array('success' => false, 'message' => $e->getMessage());
-        $code = 500;
-    }
-    @unlink($lockFile);
-    json_out($response, $code);
-}
-
-function action_sync_all() {
-    // 동시 실행 방지 (sync-new 와 같은 락 공유)
-    $lockFile = sys_get_temp_dir() . '/ss_sync_new.lock';
-    if (file_exists($lockFile) && (time() - filemtime($lockFile)) < SYNC_LOCK_SECONDS) {
-        json_out(array(
-            'success' => false,
-            'message' => '이미 동기화가 실행 중입니다. 잠시 후 다시 시도하세요.',
-        ), 409);
-    }
-    touch($lockFile);
-
-    $response = null;
-    $code = 200;
-    try {
-        set_time_limit(0);
-        $start = round(microtime(true) * 1000);
-
-        $token = get_access_token();
-
-        // [1단계] 전체 상품번호 수집 (검색 API + 시드 파일 + Supabase 기존 데이터 병합)
-        $apiIds = get_all_product_ids_php($token);
-        $knownIds = load_known_product_ids();
-        try {
-            $savedIds = sb_get_saved_origin_nos();
-        } catch (Exception $e) {
-            $savedIds = array();
-        }
-        $allIds = array_values(array_unique(array_merge($apiIds, $knownIds, $savedIds)));
-
-        // [2단계] 전체 상품 상세 정보 병렬 수집 (기존 상품 포함 - 네이버 기준으로 갱신)
-        $details = fetch_details_parallel($token, $allIds, DETAIL_CONCURRENCY);
-
-        // [3단계] 파싱
-        $dbRows = array();
-        $failIds = array();
-        foreach ($allIds as $pid) {
-            if (isset($details[$pid])) {
-                foreach (parse_product_rows($pid, $details[$pid]) as $r) {
-                    $dbRows[] = $r;
-                }
-            } else {
-                $failIds[] = $pid;
-            }
-        }
-
-        // [4단계] Supabase 전체 교체 (기존 데이터 삭제 후 재삽입)
-        sb_delete_all();
-        $inserted = count($dbRows) > 0 ? sb_insert_rows(rows_to_db_dicts($dbRows)) : 0;
-
-        $elapsed = (int)((round(microtime(true) * 1000) - $start) / 1000);
-        $msg = '스토어 전체: ' . count($allIds) . '개 상품 | ' . count($dbRows) . '행 처리 (Supabase ' . $inserted . '행 삽입, ' . $elapsed . '초 소요)';
-        if (count($failIds) > 0) {
-            $msg .= "\n" . '조회 실패: ' . implode(', ', $failIds);
-        }
-        $response = array('success' => true, 'message' => $msg);
     } catch (Exception $e) {
         $response = array('success' => false, 'message' => $e->getMessage());
         $code = 500;
@@ -804,6 +915,6 @@ switch ($action) {
     default:
         json_out(array(
             'success' => false,
-            'message' => 'action 파라미터 필요 (test-naver, update-stock, sync-new-products, my-ip, health)',
+            'message' => 'action 파라미터 필요 (test-naver, update-stock, sync-new-products, sync-all, my-ip, health)',
         ), 400);
 }
