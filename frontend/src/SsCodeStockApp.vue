@@ -1,38 +1,5 @@
 <template>
-  <div class="left-off-canvas-menu" :class="{ 'active': showLeftMenu }">
-    <div class="left-menu-inner">
-      <div class="left-menu-header">
-        <h2>메뉴</h2>
-        <button class="close-left-menu-btn" @click="showLeftMenu = false">&times;</button>
-      </div>
-      <nav class="left-nav-links">
-        <a href="index.html" class="nav-link">
-          <span class="icon">📦</span>재고
-        </a>
-        <a href="0stock.html" class="nav-link">
-          <span class="icon">🚫</span>품절
-        </a>
-        <a href="getstock.html" class="nav-link">
-          <span class="icon">📥</span>입고
-        </a>
-        <a href="outstock.html" class="nav-link">
-          <span class="icon">📤</span>출고
-        </a>
-        <a href="todolist.html" class="nav-link">
-          <span class="icon">📚</span>지식 라이브러리
-        </a>
-        <a href="ss_code_stock.html" class="nav-link active">
-          <span class="icon">🏪</span>스마트스토어 재고변경
-        </a>
-        <a href="cs_todolist.html" class="nav-link">
-          <span class="icon">📋</span>해야할일
-        </a>
-        <a href="kanban.html" class="nav-link">
-          <span class="icon">💬</span>CS처리
-        </a>
-      </nav>
-    </div>
-  </div>
+  <SideMenu v-model="showLeftMenu" active="ss_code_stock.html" />
 
   <div class="main-layout" :class="{ 'dimmed': showLeftMenu }">
     <header class="top-bar">
@@ -218,6 +185,7 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { supabase } from './supabaseClient'
+import SideMenu from './components/SideMenu.vue'
 
 const showLeftMenu = ref(false)
 const searchQuery = ref('')

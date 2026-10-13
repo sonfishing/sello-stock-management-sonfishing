@@ -1,21 +1,5 @@
 <template>
-  <div class="left-off-canvas-menu" :class="{ 'active': showLeftMenu }">
-    <div class="left-menu-inner">
-      <div class="left-menu-header">
-        <h2>메뉴</h2>
-        <button class="close-left-menu-btn" @click="showLeftMenu = false">&times;</button>
-      </div>
-      <nav class="left-nav-links">
-        <a href="index.html" class="nav-link"><span class="icon">📦</span>재고</a>
-        <a href="0stock.html" class="nav-link"><span class="icon">🚫</span>품절</a>
-        <a href="ss_code_stock.html" class="nav-link"><span class="icon">🏪</span>스마트스토어 재고변경</a>
-        <a href="cs_todolist.html" class="nav-link"><span class="icon">📋</span>해야할일</a>
-        <a href="kanban.html" class="nav-link"><span class="icon">💬</span>CS처리</a>
-        <a href="todolist.html" class="nav-link"><span class="icon">📚</span>지식 라이브러리</a>
-        <a href="kakao_alert.html" class="nav-link active"><span class="icon">🔔</span>카카오 알림</a>
-      </nav>
-    </div>
-  </div>
+  <SideMenu v-model="showLeftMenu" active="kakao_alert.html" />
 
   <div class="main-layout" :class="{ 'dimmed': showLeftMenu }">
     <header class="top-bar">
@@ -27,6 +11,7 @@
         <span class="count-badge">{{ filteredItems.length }}건</span>
       </div>
       <div class="right-actions">
+        <button class="menu-btn" @click="toggleSettings">⚙️ 설정</button>
         <div class="search-box">
           <input
             v-model="searchQuery"
@@ -43,6 +28,32 @@
         <button class="menu-btn danger-btn" @click="clearAll">전체삭제</button>
       </div>
     </header>
+
+    <div v-if="showSettings" class="settings-panel">
+      <div class="settings-note">
+        저장하면 메신저봇R이 최대 10분 내 새 설정을 받아옵니다.
+        값이 비어있으면 봇 스크립트의 기본값이 사용됩니다.
+      </div>
+      <div class="settings-grid">
+        <div class="settings-field">
+          <label>감시 방 이름</label>
+          <input v-model="cfgRoom" placeholder="예: 우리방 단톡방 (채팅방 이름과 정확히 일치)" />
+        </div>
+        <div class="settings-field">
+          <label>검색 키워드 (쉼표 구분)</label>
+          <input v-model="cfgKeywords" placeholder="예: 공지, 긴급, 모집" />
+        </div>
+      </div>
+      <div class="settings-actions">
+        <button class="menu-btn save-btn" @click="saveConfig" :disabled="savingConfig">
+          {{ savingConfig ? '저장 중...' : '💾 설정 저장' }}
+        </button>
+        <button class="menu-btn danger-btn" @click="clearConfig" :disabled="savingConfig">설정 삭제</button>
+        <span class="config-state" :class="{ active: hasServerConfig }">
+          {{ hasServerConfig ? '서버 설정 사용 중' : '서버 설정 없음 → 스크립트 기본값' }}
+        </span>
+      </div>
+    </div>
 
     <div class="content-area">
       <div class="list-view">
@@ -96,6 +107,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import SideMenu from './components/SideMenu.vue'
 
 const items = ref([])
 const loading = ref(false)
@@ -107,7 +119,14 @@ const toast = ref('')
 let toastTimer = null
 let autoTimer = null
 
+const showSettings = ref(false)
+const cfgRoom = ref('')
+const cfgKeywords = ref('')
+const savingConfig = ref(false)
+const hasServerConfig = ref(false)
+
 const API = '/api/kakao_alert'
+const CONFIG_API = '/api/kakao_config'
 
 const filteredItems = computed(() => {
   let list = items.value
@@ -157,8 +176,65 @@ async function clearAll() {
   }
 }
 
+async function loadConfig() {
+  try {
+    const res = await fetch(CONFIG_API, { cache: 'no-store' })
+    const data = await res.json()
+    if (!data.success) return
+    cfgRoom.value = data.data.room || ''
+    cfgKeywords.value = (data.data.keywords || []).join(', ')
+    hasServerConfig.value = !!(cfgRoom.value || (data.data.keywords || []).length)
+  } catch (e) {
+    /* 설정 조회 실패는 무시 (표시만 기본값으로) */
+  }
+}
+
+function toggleSettings() {
+  showSettings.value = !showSettings.value
+  if (showSettings.value) loadConfig()
+}
+
+async function saveConfig() {
+  savingConfig.value = true
+  try {
+    const keywords = cfgKeywords.value.split(',').map(s => s.trim()).filter(Boolean)
+    const res = await fetch(CONFIG_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ room: cfgRoom.value.trim(), keywords })
+    })
+    const data = await res.json()
+    if (!data.success) throw new Error(data.message || '저장 실패')
+    hasServerConfig.value = !!(data.data.room || data.data.keywords.length)
+    showToast('설정 저장 완료 (봇에 최대 10분 내 반영)')
+  } catch (e) {
+    showToast('저장 실패: ' + e.message, 4000)
+  } finally {
+    savingConfig.value = false
+  }
+}
+
+async function clearConfig() {
+  if (!confirm('서버 설정을 삭제할까요? (봇은 스크립트 기본값으로 돌아갑니다)')) return
+  savingConfig.value = true
+  try {
+    const res = await fetch(CONFIG_API, { method: 'DELETE' })
+    const data = await res.json()
+    if (!data.success) throw new Error(data.message || '삭제 실패')
+    cfgRoom.value = ''
+    cfgKeywords.value = ''
+    hasServerConfig.value = false
+    showToast('설정 삭제됨 (봇은 스크립트 기본값 사용)')
+  } catch (e) {
+    showToast('삭제 실패: ' + e.message, 4000)
+  } finally {
+    savingConfig.value = false
+  }
+}
+
 onMounted(() => {
   load()
+  loadConfig()
   autoTimer = setInterval(() => load(true), 30000) // 30초마다 자동 갱신
 })
 
@@ -205,6 +281,71 @@ onUnmounted(() => {
 }
 .danger-btn:hover {
   background: #FEF3F2 !important;
+}
+
+.settings-panel {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-color);
+  padding: 16px 24px;
+}
+.settings-note {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+}
+.settings-grid {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.settings-field {
+  flex: 1;
+  min-width: 260px;
+}
+.settings-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.settings-field input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  padding: 9px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  outline: none;
+}
+.settings-field input:focus {
+  border-color: var(--primary);
+  background: var(--surface);
+}
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.save-btn {
+  background: var(--primary) !important;
+  color: #fff !important;
+}
+.config-state {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+.config-state.active {
+  color: var(--primary);
+  background: var(--primary-light);
+  border-color: var(--primary-light);
 }
 
 .state-box {

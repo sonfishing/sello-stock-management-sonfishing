@@ -1,24 +1,5 @@
 <template>
-  <div class="left-off-canvas-menu" :class="{ 'active': showLeftMenu }">
-    <div class="left-menu-inner">
-      <div class="left-menu-header">
-        <h2>메뉴</h2>
-        <button class="close-left-menu-btn" @click="showLeftMenu = false">&times;</button>
-      </div>
-      <nav class="left-nav-links">
-        <a href="index.html" class="nav-link"><span class="icon">📦</span>재고</a>
-        <a href="0stock.html" class="nav-link"><span class="icon">🚫</span>품절</a>
-        <a href="getstock.html" class="nav-link"><span class="icon">📥</span>입고</a>
-        <a href="outstock.html" class="nav-link"><span class="icon">📤</span>출고</a>
-        <a href="todolist.html" class="nav-link"><span class="icon">📚</span>지식 라이브러리</a>
-        <a href="ss_code_stock.html" class="nav-link"><span class="icon">🏪</span>스마트스토어 재고변경</a>
-        <a href="cs_todolist.html" class="nav-link active"><span class="icon">📋</span>해야할일</a>
-        <a href="kanban.html" class="nav-link"><span class="icon">💬</span>CS처리</a>
-      </nav>
-    </div>
-  </div>
-
-  <button class="left-menu-toggle" @click="showLeftMenu = true">☰</button>
+  <SideMenu v-model="showLeftMenu" active="cs_todolist.html" floating-toggle />
 
   <div class="kanban-app">
     <div class="kanban-header">
@@ -152,6 +133,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { supabase } from './supabaseClient'
+import SideMenu from './components/SideMenu.vue'
 
 const columns = [
   { id: 'pending', title: '대기중', color: '#f59e0b', placeholder: '+ 할일 입력 후 Enter' },
@@ -606,33 +588,5 @@ onMounted(loadCards)
   background: #1f2937; color: white; padding: 10px 20px;
   border-radius: 8px; font-size: 14px; z-index: 9999;
 }
-.left-menu-toggle {
-  position: fixed; top: 10px; left: 10px; z-index: 100;
-  background: white; border: 1px solid #ccc; border-radius: 6px;
-  padding: 6px 10px; font-size: 18px; cursor: pointer;
-}
-.left-off-canvas-menu {
-  position: fixed; top: 0; left: -260px;
-  width: 260px; height: 100vh; background: white;
-  box-shadow: 2px 0 12px rgba(0,0,0,0.1); z-index: 200; transition: left 0.3s;
-}
-.left-off-canvas-menu.active { left: 0; }
-.left-menu-inner { padding: 20px; }
-.left-menu-header {
-  display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
-}
-.left-menu-header h2 { margin: 0; font-size: 1.2rem; }
-.close-left-menu-btn {
-  background: none; border: none; font-size: 24px; cursor: pointer; color: #666;
-}
-.left-nav-links { display: flex; flex-direction: column; gap: 4px; }
-.nav-link {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; border-radius: 8px;
-  text-decoration: none; color: #374151; font-size: 14px; transition: background 0.15s;
-}
-.nav-link:hover { background: #f3f4f6; }
-.nav-link.active { background: #eff6ff; color: #2563eb; font-weight: 600; }
-.nav-link .icon { font-size: 16px; }
 @media (max-width: 768px) { .kanban-board { grid-template-columns: 1fr; } }
 </style>
