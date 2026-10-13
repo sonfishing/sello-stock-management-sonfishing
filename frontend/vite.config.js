@@ -15,7 +15,8 @@ export default defineConfig({
         sscodestock: resolve(__dirname, 'ss_code_stock.html'),
         cstodolist: resolve(__dirname, 'cs_todolist.html'),
         kanban: resolve(__dirname, 'kanban.html'),
-        todolist: resolve(__dirname, 'todolist.html')
+        todolist: resolve(__dirname, 'todolist.html'),
+        kakao_alert: resolve(__dirname, 'kakao_alert.html')
       }
     }
   }
