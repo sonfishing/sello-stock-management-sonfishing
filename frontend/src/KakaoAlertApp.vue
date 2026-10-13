@@ -94,6 +94,7 @@
                     <th style="width: 150px;">시간</th>
                     <th style="width: 130px;">보낸사람</th>
                     <th>메시지내용</th>
+                    <th style="width: 44px;"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -103,6 +104,9 @@
                     <td class="cell-msg">
                       <span v-if="item.keyword" class="keyword-badge" :title="'감지 키워드: ' + item.keyword">{{ item.keyword }}</span>
                       <span class="msg-text">{{ item.msg }}</span>
+                    </td>
+                    <td class="cell-actions">
+                      <button class="row-delete-btn" title="이 메시지 삭제" @click="removeItem(item)">✕</button>
                     </td>
                   </tr>
                 </tbody>
@@ -171,6 +175,12 @@ function showToast(msg, ms = 2500) {
   toastTimer = setTimeout(() => { toast.value = '' }, ms)
 }
 
+/* 미확인 배지 공통 키 (SideMenu 배지와 연동) */
+const SEEN_KEY = 'kakao_alert_seen'
+function markSeen() {
+  try { localStorage.setItem(SEEN_KEY, new Date().toISOString()) } catch (e) {}
+}
+
 async function load(silent = false) {
   if (!silent) loading.value = true
   error.value = ''
@@ -183,6 +193,22 @@ async function load(silent = false) {
     error.value = '불러오기 실패: ' + e.message
   } finally {
     loading.value = false
+    // 페이지를 보고 있는 중이면 새 메시지를 "확인한" 것으로 처리
+    if (document.visibilityState === 'visible') markSeen()
+  }
+}
+
+async function removeItem(item) {
+  const preview = (item.msg || '').slice(0, 60)
+  if (!confirm('이 메시지를 삭제할까요?\n' + preview)) return
+  try {
+    const res = await fetch(API + '?id=' + encodeURIComponent(item.id), { method: 'DELETE' })
+    const data = await res.json()
+    if (!data.success) throw new Error(data.message || '삭제 실패')
+    items.value = items.value.filter(m => m.id !== item.id)
+    showToast('삭제됨')
+  } catch (e) {
+    showToast('삭제 실패: ' + e.message, 4000)
   }
 }
 
@@ -281,15 +307,25 @@ async function clearConfig() {
   }
 }
 
+function onVisible() {
+  if (document.visibilityState === 'visible') {
+    load(true) // 탭 복귀 시 즉시 갱신
+    markSeen()
+  }
+}
+
 onMounted(() => {
   load()
   loadConfig()
-  autoTimer = setInterval(() => load(true), 30000) // 30초마다 자동 갱신
+  markSeen()
+  autoTimer = setInterval(() => load(true), 5000) // 5초마다 자동 갱신
+  document.addEventListener('visibilitychange', onVisible)
 })
 
 onUnmounted(() => {
   clearInterval(autoTimer)
   clearTimeout(toastTimer)
+  document.removeEventListener('visibilitychange', onVisible)
 })
 </script>
 
@@ -439,6 +475,25 @@ onUnmounted(() => {
 .cell-msg .msg-text {
   white-space: pre-wrap;
   word-break: break-word;
+}
+.cell-actions {
+  text-align: center;
+  padding-left: 0 !important;
+  padding-right: 8px !important;
+}
+.row-delete-btn {
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 7px;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+.row-delete-btn:hover {
+  color: #F04438;
+  background: rgba(240, 68, 56, 0.08);
 }
 
 .keyword-badge {

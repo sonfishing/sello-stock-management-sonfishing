@@ -77,6 +77,15 @@ export async function onRequest(context) {
     // 웹 페이지에서 목록 조회
     if (request.method === 'GET') {
       const url = new URL(request.url)
+
+      // 사이드바 배지용: since 이후 신규 건수만 경량 조회
+      const since = (url.searchParams.get('since') || '').trim()
+      if (since) {
+        const all = (await kv.get(KV_KEY, { type: 'json' })) || []
+        const count = all.filter(m => String(m.receivedAt || '') > since).length
+        return json({ success: true, count })
+      }
+
       const q = (url.searchParams.get('q') || '').trim().toLowerCase()
       const limit = parseInt(url.searchParams.get('limit') || '0', 10) || 0
 
@@ -98,8 +107,19 @@ export async function onRequest(context) {
       return json({ success: true, data: list, total: list.length })
     }
 
-    // 전체 삭제
+    // 삭제: ?id= 있으면 해당 항목만, 없으면 전체 삭제
     if (request.method === 'DELETE') {
+      const url = new URL(request.url)
+      const id = (url.searchParams.get('id') || '').trim()
+      if (id) {
+        const list = (await kv.get(KV_KEY, { type: 'json' })) || []
+        const next = list.filter(m => m.id !== id)
+        if (next.length === list.length) {
+          return json({ success: false, message: 'not found' }, 404)
+        }
+        await kv.put(KV_KEY, JSON.stringify(next))
+        return json({ success: true, deleted: id })
+      }
       await kv.put(KV_KEY, JSON.stringify([]))
       return json({ success: true })
     }

@@ -12,8 +12,12 @@
           :href="link.href"
           class="nav-link"
           :class="{ active: link.href === active }"
+          @click="onLinkClick(link)"
         >
           <span class="icon">{{ link.icon }}</span>{{ link.label }}
+          <span v-if="link.href === 'kakao_alert.html' && alertBadge > 0" class="nav-badge">
+            {{ alertBadge > 99 ? '99+' : alertBadge }}
+          </span>
         </a>
       </nav>
     </div>
@@ -27,6 +31,8 @@
 </template>
 
 <script setup>
+import { ref, onMounted, onUnmounted } from 'vue'
+
 defineProps({
   modelValue: { type: Boolean, default: false },
   active: { type: String, default: '' },
@@ -45,6 +51,38 @@ const links = [
   { href: 'kanban.html', icon: '💬', label: 'CS처리' },
   { href: 'kakao_alert.html', icon: '🔔', label: '카카오 알림' }
 ]
+
+/* 카카오 알림 미확인 배지 (localStorage에 마지막 확인 시각 저장) */
+const SEEN_KEY = 'kakao_alert_seen'
+const isAlertPage = typeof location !== 'undefined' && location.pathname.includes('kakao_alert')
+const alertBadge = ref(0)
+let badgeTimer = null
+
+async function pollBadge() {
+  try {
+    const since = localStorage.getItem(SEEN_KEY) || '1970-01-01T00:00:00.000Z'
+    const res = await fetch('/api/kakao_alert?since=' + encodeURIComponent(since), { cache: 'no-store' })
+    const data = await res.json()
+    if (data && data.success) alertBadge.value = data.count || 0
+  } catch (e) { /* 배지 조회 실패는 무시 */ }
+}
+
+function onLinkClick(link) {
+  if (link.href === 'kakao_alert.html') {
+    try { localStorage.setItem(SEEN_KEY, new Date().toISOString()) } catch (e) {}
+    alertBadge.value = 0
+  }
+}
+
+onMounted(() => {
+  if (isAlertPage) return // 알림 페이지 자체에서는 배지 불필요
+  pollBadge()
+  badgeTimer = setInterval(pollBadge, 15000)
+})
+
+onUnmounted(() => {
+  clearInterval(badgeTimer)
+})
 </script>
 
 <style scoped>
@@ -126,6 +164,21 @@ const links = [
 }
 .nav-link .icon {
   font-size: 16px;
+}
+.nav-badge {
+  margin-left: auto;
+  background: #F04438;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  line-height: 1;
 }
 
 .left-menu-toggle {
