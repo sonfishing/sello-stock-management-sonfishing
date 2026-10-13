@@ -31,26 +31,34 @@
 
     <div v-if="showSettings" class="settings-panel">
       <div class="settings-note">
-        저장하면 메신저봇R이 최대 10분 내 새 설정을 받아옵니다.
-        값이 비어있으면 봇 스크립트의 기본값이 사용됩니다.
+        감시할 방과 검색 키워드 쌍을 여러 개 만들 수 있습니다. 저장하면 메신저봇R이 최대 10분 내 새 설정을 받아옵니다.
+        규칙이 없으면 봇 스크립트의 기본값(방·키워드)이 사용됩니다.
       </div>
-      <div class="settings-grid">
-        <div class="settings-field">
-          <label>감시 방 이름</label>
-          <input v-model="cfgRoom" placeholder="예: 우리방 단톡방 (채팅방 이름과 정확히 일치)" />
-        </div>
-        <div class="settings-field">
-          <label>검색 키워드 (쉼표 구분)</label>
-          <input v-model="cfgKeywords" placeholder="예: 공지, 긴급, 모집" />
+
+      <div v-if="cfgRules.length" class="rules-list">
+        <div v-for="(rule, i) in cfgRules" :key="i" class="rule-row">
+          <span class="rule-num">{{ i + 1 }}</span>
+          <div class="settings-field">
+            <label>감시 방 이름</label>
+            <input v-model="rule.room" placeholder="예: 우리방 단톡방 (정확히 일치)" />
+          </div>
+          <div class="settings-field">
+            <label>검색 키워드 (쉼표 구분)</label>
+            <input v-model="rule.keywords" placeholder="예: 공지, 긴급, 모집" />
+          </div>
+          <button class="menu-btn danger-btn rule-remove" @click="removeRule(i)" title="이 규칙 삭제">×</button>
         </div>
       </div>
+      <div v-else class="rules-empty">추가된 규칙이 없습니다.</div>
+
       <div class="settings-actions">
+        <button class="menu-btn" @click="addRule">＋ 규칙 추가</button>
         <button class="menu-btn save-btn" @click="saveConfig" :disabled="savingConfig">
           {{ savingConfig ? '저장 중...' : '💾 설정 저장' }}
         </button>
         <button class="menu-btn danger-btn" @click="clearConfig" :disabled="savingConfig">설정 삭제</button>
         <span class="config-state" :class="{ active: hasServerConfig }">
-          {{ hasServerConfig ? '서버 설정 사용 중' : '서버 설정 없음 → 스크립트 기본값' }}
+          {{ hasServerConfig ? `서버 설정 사용 중 (${configRuleCount}개 규칙)` : '서버 설정 없음 → 스크립트 기본값' }}
         </span>
       </div>
     </div>
@@ -75,27 +83,31 @@
 
         <div v-else class="table-container">
           <div class="table-wrapper">
-            <table class="product-table alert-table">
-              <thead>
-                <tr>
-                  <th style="width: 150px;">시간</th>
-                  <th style="width: 180px;">방이름</th>
-                  <th style="width: 130px;">보낸사람</th>
-                  <th>메시지내용</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in filteredItems" :key="item.id">
-                  <td class="cell-time">{{ item.time || item.receivedAt || '-' }}</td>
-                  <td class="cell-room">{{ item.room || '-' }}</td>
-                  <td class="cell-sender">{{ item.sender || '-' }}</td>
-                  <td class="cell-msg">
-                    <span v-if="item.keyword" class="keyword-badge" :title="'감지 키워드: ' + item.keyword">{{ item.keyword }}</span>
-                    <span class="msg-text">{{ item.msg }}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div v-for="group in groupedItems" :key="group.room" class="room-group">
+              <div class="room-group-header">
+                <span class="room-group-name">💬 {{ group.room }}</span>
+                <span class="room-group-count">{{ group.list.length }}건</span>
+              </div>
+              <table class="product-table alert-table">
+                <thead>
+                  <tr>
+                    <th style="width: 150px;">시간</th>
+                    <th style="width: 130px;">보낸사람</th>
+                    <th>메시지내용</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in group.list" :key="item.id">
+                    <td class="cell-time">{{ item.time || item.receivedAt || '-' }}</td>
+                    <td class="cell-sender">{{ item.sender || '-' }}</td>
+                    <td class="cell-msg">
+                      <span v-if="item.keyword" class="keyword-badge" :title="'감지 키워드: ' + item.keyword">{{ item.keyword }}</span>
+                      <span class="msg-text">{{ item.msg }}</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -120,8 +132,8 @@ let toastTimer = null
 let autoTimer = null
 
 const showSettings = ref(false)
-const cfgRoom = ref('')
-const cfgKeywords = ref('')
+const cfgRules = ref([]) // [{ room: '', keywords: '쉼표문자열' }]
+const configRuleCount = ref(0)
 const savingConfig = ref(false)
 const hasServerConfig = ref(false)
 
@@ -140,6 +152,17 @@ const filteredItems = computed(() => {
     )
   }
   return sortAsc.value ? list : list.slice().reverse()
+})
+
+// 방별로 그룹화 (표시 순서: 필터/정렬 결과의 첫 등장 순서 = 최신 또는 최오래된 방 우선)
+const groupedItems = computed(() => {
+  const groups = new Map()
+  for (const item of filteredItems.value) {
+    const key = (item.room || '').trim() || '(방 이름 없음)'
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(item)
+  }
+  return [...groups.entries()].map(([room, list]) => ({ room, list }))
 })
 
 function showToast(msg, ms = 2500) {
@@ -176,14 +199,30 @@ async function clearAll() {
   }
 }
 
+function toRows(rules) {
+  return (rules || []).map(r => ({
+    room: r.room || '',
+    keywords: (r.keywords || []).join(', ')
+  }))
+}
+
+function addRule() {
+  cfgRules.value.push({ room: '', keywords: '' })
+}
+
+function removeRule(i) {
+  cfgRules.value.splice(i, 1)
+}
+
 async function loadConfig() {
   try {
     const res = await fetch(CONFIG_API, { cache: 'no-store' })
     const data = await res.json()
     if (!data.success) return
-    cfgRoom.value = data.data.room || ''
-    cfgKeywords.value = (data.data.keywords || []).join(', ')
-    hasServerConfig.value = !!(cfgRoom.value || (data.data.keywords || []).length)
+    cfgRules.value = toRows(data.data.rules)
+    configRuleCount.value = cfgRules.value.length
+    hasServerConfig.value = cfgRules.value.length > 0
+    if (!cfgRules.value.length) addRule() // 편집 편의를 위해 빈 행 1개
   } catch (e) {
     /* 설정 조회 실패는 무시 (표시만 기본값으로) */
   }
@@ -197,16 +236,26 @@ function toggleSettings() {
 async function saveConfig() {
   savingConfig.value = true
   try {
-    const keywords = cfgKeywords.value.split(',').map(s => s.trim()).filter(Boolean)
+    const rules = cfgRules.value
+      .map(r => ({
+        room: r.room.trim(),
+        keywords: r.keywords.split(',').map(s => s.trim()).filter(Boolean)
+      }))
+      .filter(r => r.room || r.keywords.length)
+
     const res = await fetch(CONFIG_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ room: cfgRoom.value.trim(), keywords })
+      body: JSON.stringify({ rules })
     })
     const data = await res.json()
     if (!data.success) throw new Error(data.message || '저장 실패')
-    hasServerConfig.value = !!(data.data.room || data.data.keywords.length)
-    showToast('설정 저장 완료 (봇에 최대 10분 내 반영)')
+
+    cfgRules.value = toRows(data.data.rules)
+    if (!cfgRules.value.length) addRule()
+    configRuleCount.value = data.data.rules.length
+    hasServerConfig.value = data.data.rules.length > 0
+    showToast(`설정 저장 완료 (${data.data.rules.length}개 규칙, 봇에 최대 10분 내 반영)`)
   } catch (e) {
     showToast('저장 실패: ' + e.message, 4000)
   } finally {
@@ -221,8 +270,8 @@ async function clearConfig() {
     const res = await fetch(CONFIG_API, { method: 'DELETE' })
     const data = await res.json()
     if (!data.success) throw new Error(data.message || '삭제 실패')
-    cfgRoom.value = ''
-    cfgKeywords.value = ''
+    cfgRules.value = [{ room: '', keywords: '' }]
+    configRuleCount.value = 0
     hasServerConfig.value = false
     showToast('설정 삭제됨 (봇은 스크립트 기본값 사용)')
   } catch (e) {
@@ -403,5 +452,40 @@ onUnmounted(() => {
   margin-right: 7px;
   vertical-align: 1px;
   white-space: nowrap;
+}
+
+/* 방별 그룹 표시 */
+.room-group + .room-group {
+  border-top: 1px solid var(--border-color);
+}
+.room-group-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  background: var(--bg-main);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.room-group-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.room-group-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 1px 9px;
 }
 </style>

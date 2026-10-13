@@ -37,20 +37,33 @@ export async function onRequest(context) {
     // 메신저봇R에서 키워드 감지 시 전송
     if (request.method === 'POST') {
       const body = await request.json()
-      const { room, sender, msg, time, keyword } = body
+      const room = String(body.room || '')
+      const sender = String(body.sender || '')
+      const msg = String(body.msg || '')
+      const time = String(body.time || '')
+      const keyword = String(body.keyword || '')
 
       if (!msg) {
         return json({ success: false, message: 'msg required' }, 400)
       }
 
       const list = (await kv.get(KV_KEY, { type: 'json' })) || []
+
+      // 같은 메시지(방/보낸사람/내용/시간 동일)는 한 항목만 유지
+      const duplicate = list.some(m =>
+        m.room === room && m.sender === sender && m.msg === msg && m.time === time
+      )
+      if (duplicate) {
+        return json({ success: true, duplicate: true })
+      }
+
       const item = {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        room: room || '',
-        sender: sender || '',
+        room,
+        sender,
         msg,
-        time: time || '',
-        keyword: keyword || '',
+        time,
+        keyword,
         receivedAt: new Date().toISOString()
       }
 
