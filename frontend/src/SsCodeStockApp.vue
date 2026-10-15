@@ -69,7 +69,7 @@
               <table class="product-table">
               <thead>
                 <tr>
-                  <th style="width: 11%;">원상품코드</th>
+                  <th style="width: 11%;">상품번호</th>
                   <th style="width: 17%;">상품명</th>
                   <th style="width: 14%;">옵션명</th>
                   <th style="width: 7%; text-align: center;">기본가</th>
@@ -87,7 +87,7 @@
                     class="premium-row"
                     :class="{ 'row-modified': modifiedRows.has(product.id), 'row-completed': completedRows.has(product.id) }">
                   <td>
-                    <div class="padding-cell code-cell">{{ product.origin_product_no || '-' }}</div>
+                    <div class="padding-cell code-cell">{{ product.channel_product_no || product.origin_product_no || '-' }}</div>
                   </td>
                   <td>
                     <div class="padding-cell text-content">{{ product.name || '-' }}</div>

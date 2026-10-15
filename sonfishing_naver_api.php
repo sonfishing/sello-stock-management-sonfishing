@@ -240,7 +240,7 @@ function fetch_product_detail($token, $originNo) {
     return null;
 }
 
-function parse_product_rows($originNo, $productData) {
+function parse_product_rows($originNo, $productData, $channelNo = '') {
     $rows = array();
     $originProd = isset($productData['originProduct']) ? $productData['originProduct'] : $productData;
 
@@ -316,7 +316,8 @@ function parse_product_rows($originNo, $productData) {
             $rows[] = array(
                 $originNo, '일반옵션', $optId, $prodName, $optNameStr,
                 (string)$basePrice, (string)$optPrice, (string)$stock,
-                $optStatus, $optCode, $tagsStr, $usable ? 'Y' : 'N'
+                $optStatus, $optCode, $tagsStr, $usable ? 'Y' : 'N',
+                $channelNo
             );
         }
     }
@@ -343,7 +344,8 @@ function parse_product_rows($originNo, $productData) {
             $rows[] = array(
                 $originNo, '추가옵션', $suppId, $prodName, $suppOptName,
                 (string)$suppPrice, '0', (string)$suppStock,
-                $suppStatus, $suppCode, $tagsStr, $usable ? 'Y' : 'N'
+                $suppStatus, $suppCode, $tagsStr, $usable ? 'Y' : 'N',
+                $channelNo
             );
         }
     }
@@ -353,7 +355,8 @@ function parse_product_rows($originNo, $productData) {
         $rows[] = array(
             $originNo, '원상품', '', $prodName, '',
             (string)$basePrice, '0', (string)$baseStock,
-            $baseStatus, $sellerCode, $tagsStr, $baseDisplay
+            $baseStatus, $sellerCode, $tagsStr, $baseDisplay,
+            $channelNo
         );
     }
 
@@ -411,7 +414,7 @@ function row_val($parts, $i) {
 function rows_to_db_dicts($rows) {
     $dicts = array();
     foreach ($rows as $parts) {
-        while (count($parts) < 12) {
+        while (count($parts) < 13) {
             $parts[] = '';
         }
         $dicts[] = array(
@@ -427,6 +430,7 @@ function rows_to_db_dicts($rows) {
             'seller_code' => row_val($parts, 9),
             'tags' => row_val($parts, 10),
             'display_status' => row_val($parts, 11),
+            'channel_product_no' => row_val($parts, 12),
         );
     }
     return $dicts;
@@ -483,6 +487,44 @@ function get_all_product_ids_php($token) {
         $page++;
     }
     return $ids;
+}
+
+function get_product_channel_map_php($token) {
+    // 검색 API 결과에서 originProductNo -> 스마트스토어 채널상품번호(관리자 상품번호) 매핑
+    $map = array();
+    $page = 1;
+    while (true) {
+        list($c, $data, $raw) = api_request(
+            'POST',
+            'https://api.commerce.naver.com/external/v1/products/search',
+            $token,
+            array('page' => $page, 'size' => 100)
+        );
+        if ($c !== 200) {
+            break;
+        }
+        $contents = isset($data['contents']) ? $data['contents'] : array();
+        if (count($contents) === 0) {
+            break;
+        }
+        foreach ($contents as $p) {
+            $ono = isset($p['originProductNo']) ? (string)$p['originProductNo'] : '';
+            if ($ono === '') {
+                continue;
+            }
+            if (isset($p['channelProducts']) && is_array($p['channelProducts'])) {
+                foreach ($p['channelProducts'] as $cp) {
+                    if (isset($cp['channelServiceType']) && $cp['channelServiceType'] === 'STOREFARM'
+                        && !empty($cp['channelProductNo'])) {
+                        $map[$ono] = (string)$cp['channelProductNo'];
+                        break;
+                    }
+                }
+            }
+        }
+        $page++;
+    }
+    return $map;
 }
 
 function load_known_product_ids() {
@@ -574,6 +616,8 @@ function sync_step_init(&$st) {
     $ids = get_all_product_ids_php($token);
     $known = load_known_product_ids();
     $st['all_ids'] = array_values(array_unique(array_merge($ids, $known)));
+    // 채널상품번호(관리자 상품번호) 매핑 저장
+    $st['chan_map'] = get_product_channel_map_php($token);
     $st['phase'] = 'collect';
 }
 
@@ -583,6 +627,7 @@ function sync_step_collect(&$st) {
     $start = (int)$st['collect_idx'];
     $end = min($start + COLLECT_CHUNK, $total);
     $token = get_access_token();
+    $chanMap = isset($st['chan_map']) && is_array($st['chan_map']) ? $st['chan_map'] : array();
 
     for ($i = $start; $i < $end; $i++) {
         $pid = $ids[$i];
@@ -591,7 +636,8 @@ function sync_step_collect(&$st) {
             $st['fails'][] = $pid;
             continue;
         }
-        $rows = parse_product_rows($pid, $d);
+        $channelNo = isset($chanMap[$pid]) ? $chanMap[$pid] : '';
+        $rows = parse_product_rows($pid, $d, $channelNo);
         file_put_contents(
             SYNC_ROWS_DIR . '/' . $pid . '.json',
             json_encode($rows, JSON_UNESCAPED_UNICODE)
@@ -822,6 +868,7 @@ function action_sync_new_products() {
 
         // [1단계] 스토어 전체 상품번호 조회 + 시드 파일(known_products.txt) 병합
         $apiIds = get_all_product_ids_php($token);
+        $chanMap = get_product_channel_map_php($token);
         $knownIds = load_known_product_ids();
         $candidates = array_keys(array_flip(array_merge($apiIds, $knownIds)));
 
@@ -855,7 +902,7 @@ function action_sync_new_products() {
                     $failIds[] = $pid;
                     continue;
                 }
-                $rows = parse_product_rows($pid, $detail);
+                $rows = parse_product_rows($pid, $detail, isset($chanMap[$pid]) ? $chanMap[$pid] : '');
                 foreach ($rows as $r) {
                     $dbRows[] = $r;
                 }
