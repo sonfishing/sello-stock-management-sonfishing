@@ -6,7 +6,9 @@
 //             (방이름 + 검색키워드 쌍을 여러 개 등록 가능, 최대 10분 내 반영)
 //  채팅방 명령어:
 //    ..설정     → 현재 적용 중인 규칙 확인
+//    ..방이름   → 봇이 받은 방 이름과 규칙 일치 여부 확인 (알림이 안 올 때)
 //    ..새로고침 → 서버 설정을 즉시 다시 받아 적용 (10분 주기와 무관)
+//    ..핑       → 봇 → 서버 전송 연결 테스트
 //  서버 설정이 없으면 아래 로컬 기본값을 사용합니다.
 // ======================================================================
 
@@ -155,6 +157,27 @@ function response(room, msg, sender, isGroupChat, replier, image, packageName) {
   }
   if (msg === "..설정") {
     replier.reply(describeConfig());
+    return;
+  }
+
+  // 방 이름 확인: 이 방에서 입력하면 봇이 받은 방 이름과 규칙 일치 여부를 알려줌
+  if (msg === "..방이름") {
+    var matched = false;
+    for (var i = 0; i < cfg.rules.length; i++) {
+      var r = cfg.rules[i];
+      if (r.room === room || (r.room === "" && room === TARGET_ROOM)) { matched = true; break; }
+    }
+    var lines2 = ["[방 이름 확인]",
+      "봇이 받은 방 이름: [" + room + "]"];
+    if (cfg.rules.length) {
+      lines2.push("규칙 일치: " + (matched ? "O → 이 방 감시 중" : "X → 이 방은 감시 안함"));
+      for (var n = 0; n < cfg.rules.length; n++) {
+        lines2.push("규칙 " + (n + 1) + ": [" + cfg.rules[n].room + "]");
+      }
+    } else {
+      lines2.push("서버 규칙 없음 → 스크립트 기본값 방: [" + TARGET_ROOM + "]");
+    }
+    replier.reply(lines2.join("\n"));
     return;
   }
 
