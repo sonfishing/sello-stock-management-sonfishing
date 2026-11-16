@@ -82,6 +82,7 @@ function ensureConfig() {
 }
 
 // 이 방에 적용할 키워드 목록 반환 (없으면 빈 배열 = 감시 안함)
+// 규칙의 감시방 이름은 봇이 받은 "방 이름(room)"과 일치할 때만 매칭
 function keywordsForRoom(name) {
   if (!cfg.rules.length) {              // 서버 설정 없음 → 로컬 기본값
     return name === TARGET_ROOM ? KEYWORDS : [];
@@ -168,9 +169,11 @@ function response(room, msg, sender, isGroupChat, replier, image, packageName) {
       if (r.room === room || (r.room === "" && room === TARGET_ROOM)) { matched = true; break; }
     }
     var lines2 = ["[방 이름 확인]",
-      "봇이 받은 방 이름: [" + room + "]"];
+      "봇이 받은 방 이름: [" + room + "]",
+      "보낸 사람: [" + sender + "]",
+      "대화 유형: " + (isGroupChat ? "단체방" : "1:1 대화")];
     if (cfg.rules.length) {
-      lines2.push("규칙 일치: " + (matched ? "O → 이 방 감시 중" : "X → 이 방은 감시 안함"));
+      lines2.push("규칙 일치: " + (matched ? "O → 감시 중" : "X → 감시 안함"));
       for (var n = 0; n < cfg.rules.length; n++) {
         lines2.push("규칙 " + (n + 1) + ": [" + cfg.rules[n].room + "]");
       }
