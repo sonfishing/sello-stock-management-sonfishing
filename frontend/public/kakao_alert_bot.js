@@ -4,6 +4,8 @@
 //
 //  서버 설정: https://item.sonfishing.co.kr/kakao_alert 페이지의 "⚙️ 설정"
 //             (방이름 + 검색키워드 쌍을 여러 개 등록 가능, 최대 10분 내 반영)
+//             방 이름이 발신자 이름으로 오는 경우 규칙의 "채널ID"에
+//             ..방이름 답변의 채널ID를 붙여넣으면 ID로 정확히 매칭됨
 //  채팅방 명령어:
 //    ..설정     → 현재 적용 중인 규칙 확인
 //    ..방이름   → 봇이 받은 방 이름과 규칙 일치 여부 확인 (알림이 안 올 때)
@@ -84,7 +86,11 @@ function fetchConfig() {
             var k = String(rk[j]).trim();
             if (k.length > 0) kws.push(k);
           }
-          rules.push({ room: String(r.room || "").trim(), keywords: kws });
+          rules.push({
+            room: String(r.room || "").trim(),
+            channelId: String(r.channelId || "").trim(),  // 채널ID 규칙은 이름 대신 ID로 매칭
+            keywords: kws
+          });
         }
       } else if (typeof d.room === "string" || d.keywords instanceof Array) {
         // 이전 단일 설정 형식 대비
@@ -113,23 +119,33 @@ function ensureConfig() {
   new java.lang.Thread(function () { fetchConfig(); }).start();
 }
 
-// 이 방에 적용할 키워드 목록 반환 (없으면 빈 배열 = 감시 안함)
-// 규칙의 감시방 이름은 봇이 받은 "방 이름(room)"과 일치할 때만 매칭
-function keywordsForRoom(name) {
+// 이 방에 맞는 규칙 찾기 → { room: 웹 표시용 방이름, keywords: [...] } 또는 null
+// 매칭 규칙:
+//   - 규칙에 channelId(채널ID) 있음 → 봇이 받은 channelId와 일치할 때만 (방 이름 문자열이 틀려도OK)
+//   - channelId 없음 → 규칙의 방 이름과 봇이 받은 방 이름이 일치할 때
+function matchRule(name, channelId) {
+  var id = (channelId === undefined || channelId === null) ? "" : String(channelId);
   if (!cfg.rules.length) {              // 서버 설정 없음 → 로컬 기본값
-    return name === TARGET_ROOM ? KEYWORDS : [];
+    return name === TARGET_ROOM ? { room: TARGET_ROOM, keywords: KEYWORDS } : null;
   }
-  var hit = [], matched = false;
+  var hit = [], label = "", matched = false;
   for (var i = 0; i < cfg.rules.length; i++) {
     var r = cfg.rules[i];
-    var roomOk = (r.room === name) || (r.room === "" && name === TARGET_ROOM);
-    if (roomOk) {
+    var ok = false;
+    if (r.channelId) {                  // 채널ID 규칙: ID로만 매칭
+      ok = (id !== "" && r.channelId === id);
+    } else {                            // 이름 규칙: 방 이름으로만 매칭
+      ok = (r.room === name) || (r.room === "" && name === TARGET_ROOM);
+    }
+    if (ok) {
       matched = true;
+      if (!label && r.room) label = r.room;
       hit = hit.concat(r.keywords);
     }
   }
-  if (!matched) return [];              // 규칙에 없는 방은 감시 안함
-  return hit.length ? hit : KEYWORDS;   // 규칙은 있으나 키워드 비면 로컬 기본값
+  if (!matched) return null;            // 규칙에 없는 방은 감시 안함
+  if (!label) label = name;             // 표시용 방이름이 규칙에 없으면 받은 이름 사용
+  return { room: label, keywords: hit.length ? hit : KEYWORDS }; // 키워드 비면 로컬 기본값
 }
 
 function matchKeywords(text, kws) {     // 주어진 키워드 중 메시지에 포함된 것 전체 반환
@@ -154,6 +170,7 @@ function describeConfig() {
     for (var i = 0; i < cfg.rules.length; i++) {
       var r = cfg.rules[i];
       lines.push((i + 1) + ") 방: " + (r.room || (TARGET_ROOM + " (기본값)"))
+        + (r.channelId ? " | 채널ID: " + r.channelId : "")
         + " | 키워드: "
         + (r.keywords.length ? r.keywords.join(", ") : (KEYWORDS.join(", ") + " (기본값)")));
     }
@@ -190,22 +207,24 @@ function onMessage(msg) {
     return;
   }
 
-  // 방 이름 확인: 이 방에서 입력하면 봇이 받은 방 이름과 규칙 일치 여부를 알려줌
+  // 방 이름 확인: 이 방에서 입력하면 봇이 받은 방 이름/채널ID와 규칙 일치 여부를 알려줌
   if (content === "..방이름") {
-    var matched = false;
-    for (var i = 0; i < cfg.rules.length; i++) {
-      var r = cfg.rules[i];
-      if (r.room === msg.room || (r.room === "" && msg.room === TARGET_ROOM)) { matched = true; break; }
-    }
+    var cid = "";
+    try { cid = String(msg.channelId); } catch (e) { cid = "(확인불가)"; }
+    var m = matchRule(msg.room, msg.channelId);
     var lines2 = ["[방 이름 확인]",
       "봇이 받은 방 이름: [" + msg.room + "]",
+      "채널ID: [" + cid + "]",
       "보낸 사람: [" + msg.author.name + "]",
       "대화 유형: " + (msg.isGroupChat ? "단체방" : "1:1 대화")];
     if (cfg.rules.length) {
-      lines2.push("규칙 일치: " + (matched ? "O → 감시 중" : "X → 감시 안함"));
+      lines2.push("규칙 일치: " + (m ? "O → 감시 중 (표시이름: " + m.room + ")" : "X → 감시 안함"));
       for (var n = 0; n < cfg.rules.length; n++) {
-        lines2.push("규칙 " + (n + 1) + ": [" + cfg.rules[n].room + "]");
+        var rr = cfg.rules[n];
+        lines2.push("규칙 " + (n + 1) + ": [" + rr.room + "]"
+          + (rr.channelId ? " (채널ID: " + rr.channelId + ")" : ""));
       }
+      lines2.push("(채널ID 규칙은 설정창의 채널ID 칸에 위ID를 붙여넣어 등록)");
     } else {
       lines2.push("서버 규칙 없음 → 스크립트 기본값 방: [" + TARGET_ROOM + "]");
     }
@@ -234,14 +253,14 @@ function onMessage(msg) {
 
   ensureConfig();                                    // TTL 지났으면 백그라운드 재조회
 
-  var kws = keywordsForRoom(msg.room);               // 이 방에 적용되는 키워드
-  if (kws.length === 0) return;                      // 감시하지 않는 방이면 무시
+  var rule = matchRule(msg.room, msg.channelId);     // 이 방에 맞는 규칙 (없으면 null)
+  if (!rule) return;                                 // 감시하지 않는 방이면 무시
 
-  var hits = matchKeywords(content, kws);
+  var hits = matchKeywords(content, rule.keywords);
   if (hits.length === 0) return;                     // 키워드가 하나도 없으면 무시
 
   var payload = {
-    room: String(msg.room),
+    room: String(rule.room),                         // 웹 표시용 방이름 (채널ID 매칭 시 규칙의 방이름 사용)
     sender: String(msg.author.name),
     msg: String(content),
     time: now(),

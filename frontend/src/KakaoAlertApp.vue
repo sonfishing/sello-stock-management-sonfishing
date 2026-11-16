@@ -43,6 +43,10 @@
             <input v-model="rule.room" placeholder="예: 우리방 단톡방 (정확히 일치)" />
           </div>
           <div class="settings-field">
+            <label>채널ID (선택)</label>
+            <input v-model="rule.channelId" placeholder="방 이름이 틀릴 때 ..방이름의 채널ID 입력" />
+          </div>
+          <div class="settings-field">
             <label>검색 키워드 (쉼표 구분)</label>
             <input v-model="rule.keywords" placeholder="예: 공지, 긴급, 모집" />
           </div>
@@ -228,12 +232,13 @@ async function clearAll() {
 function toRows(rules) {
   return (rules || []).map(r => ({
     room: r.room || '',
+    channelId: r.channelId || '',
     keywords: (r.keywords || []).join(', ')
   }))
 }
 
 function addRule() {
-  cfgRules.value.push({ room: '', keywords: '' })
+  cfgRules.value.push({ room: '', channelId: '', keywords: '' })
 }
 
 function removeRule(i) {
@@ -265,9 +270,10 @@ async function saveConfig() {
     const rules = cfgRules.value
       .map(r => ({
         room: r.room.trim(),
+        channelId: (r.channelId || '').trim(),
         keywords: r.keywords.split(',').map(s => s.trim()).filter(Boolean)
       }))
-      .filter(r => r.room || r.keywords.length)
+      .filter(r => r.room || r.channelId || r.keywords.length)
 
     const res = await fetch(CONFIG_API, {
       method: 'POST',

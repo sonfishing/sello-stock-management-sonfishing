@@ -15,8 +15,9 @@ function json(data, status = 200) {
 
 // 저장된 설정을 규칙 배열로 정규화 (이전 단일 설정 형식도 변환)
 function normalizeRules(cfg) {
-  const toRule = (room, keywords) => ({
+  const toRule = (room, keywords, channelId) => ({
     room: String(room || '').trim(),
+    channelId: String(channelId || '').trim(),
     keywords: (Array.isArray(keywords) ? keywords : [])
       .map(k => String(k).trim())
       .filter(k => k.length > 0)
@@ -24,13 +25,13 @@ function normalizeRules(cfg) {
 
   if (Array.isArray(cfg.rules)) {
     return cfg.rules
-      .map(r => toRule(r.room, r.keywords))
-      .filter(r => r.room || r.keywords.length)
+      .map(r => toRule(r.room, r.keywords, r.channelId))
+      .filter(r => r.room || r.channelId || r.keywords.length)
   }
 
   // 이전 형식 {room, keywords} → 규칙 1개로 변환
   if (typeof cfg.room === 'string' || Array.isArray(cfg.keywords)) {
-    const rule = toRule(cfg.room, cfg.keywords)
+    const rule = toRule(cfg.room, cfg.keywords, cfg.channelId)
     return rule.room || rule.keywords.length ? [rule] : []
   }
 
@@ -65,11 +66,12 @@ export async function onRequest(context) {
       const rules = (Array.isArray(body.rules) ? body.rules : [])
         .map(r => ({
           room: String(r.room || '').trim(),
+          channelId: String(r.channelId || '').trim(),
           keywords: (Array.isArray(r.keywords) ? r.keywords : [])
             .map(k => String(k).trim())
             .filter(k => k.length > 0)
         }))
-        .filter(r => r.room || r.keywords.length)
+        .filter(r => r.room || r.channelId || r.keywords.length)
 
       await kv.put(KV_KEY, JSON.stringify({ rules, updatedAt: new Date().toISOString() }))
 
