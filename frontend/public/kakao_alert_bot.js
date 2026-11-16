@@ -1,5 +1,5 @@
 // ======================================================================
-//  카카오톡 키워드 감지 → 서버 전송 봇 (메신저봇R API1 방식)
+//  카카오톡 키워드 감지 → 서버 전송 봇 (메신저봇R API2 방식)
 //  이 파일: https://item.sonfishing.co.kr/kakao_alert_bot.js
 //
 //  서버 설정: https://item.sonfishing.co.kr/kakao_alert 페이지의 "⚙️ 설정"
@@ -10,9 +10,10 @@
 //    ..새로고침 → 서버 설정을 즉시 다시 받아 적용 (10분 주기와 무관)
 //    ..핑       → 봇 → 서버 전송 연결 테스트
 //  서버 설정이 없으면 아래 로컬 기본값을 사용합니다.
+//  (주: 레거시 API 체크는 해제하고 사용 — API2 전용 스크립트)
 // ======================================================================
 
-var Jsoup = org.jsoup.Jsoup;
+var bot = BotManager.getCurrentBot();
 
 /* ============ 로컬 기본값 (서버 설정이 없을 때 사용) ============ */
 var TARGET_ROOM  = "우리방이름";                  // 감시할 채팅방 이름 (정확히 일치)
@@ -26,6 +27,10 @@ var NOTIFY       = false;                         // 감지 시 방에 알림 �
 var cfg = { rules: [], fetchedAt: 0 };
 // rules: [{ room: "방이름", keywords: ["키워드", ...] }, ...]
 
+function safeLog(msg) {
+  try { Log.d("kakao_alert", msg); } catch (e) {}
+}
+
 function now() {
   return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
 }
@@ -34,13 +39,39 @@ function fmtTime(ms) {
   return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(ms));
 }
 
+/* ===== 순수 Java HTTP (Jsoup 의존 없음 — 버전 업데이트에 안전) ===== */
+function httpGet(url) {
+  var conn = new java.net.URL(url).openConnection();
+  conn.setConnectTimeout(10000);
+  conn.setReadTimeout(10000);
+  conn.setRequestMethod("GET");
+  var br = new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream(), "UTF-8"));
+  var line, out = [];
+  while ((line = br.readLine()) != null) out.push(line);
+  br.close();
+  conn.disconnect();
+  return out.join("\n");
+}
+
+function httpPost(url, jsonBody) {
+  var conn = new java.net.URL(url).openConnection();
+  conn.setConnectTimeout(10000);
+  conn.setReadTimeout(10000);
+  conn.setRequestMethod("POST");
+  conn.setDoOutput(true);
+  conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+  var os = conn.getOutputStream();
+  os.write(new java.lang.String(jsonBody).getBytes("UTF-8"));
+  os.close();
+  conn.getResponseCode(); // 전송 완료 확인
+  conn.disconnect();
+}
+/* ================================================================ */
+
 function fetchConfig() {
   try {
-    var res = Jsoup.connect(CONFIG_URL)
-      .ignoreContentType(true)
-      .timeout(10000)
-      .execute();
-    var data = JSON.parse(res.body());
+    var body = httpGet(CONFIG_URL);
+    var data = JSON.parse(body);
     if (data && data.success && data.data) {
       var d = data.data;
       var rules = [];
@@ -66,11 +97,12 @@ function fetchConfig() {
         rules.push({ room: String(d.room || "").trim(), keywords: old });
       }
       cfg = { rules: rules, fetchedAt: Date.now() };
+      safeLog("서버 설정 로드 - 규칙 " + rules.length + "개");
       return;
     }
     cfg.fetchedAt = Date.now();
   } catch (e) {
-    Log.error("kakao_alert 설정 조회 실패: " + e);
+    safeLog("설정 조회 실패: " + e);
     cfg.fetchedAt = Date.now(); // 실패해도 TTL 내 무한 재시도 방지
   }
 }
@@ -109,14 +141,10 @@ function matchKeywords(text, kws) {     // 주어진 키워드 중 메시지에 
 
 function postToServer(payload) {        // 실패해도 앱이 죽지 않도록 try/catch
   try {
-    Jsoup.connect(API_URL)
-      .header("Content-Type", "application/json; charset=utf-8")
-      .requestBody(JSON.stringify(payload))
-      .ignoreContentType(true)
-      .timeout(10000)
-      .post();
+    httpPost(API_URL, JSON.stringify(payload));
+    safeLog("서버 전송 완료");
   } catch (e) {
-    Log.error("kakao_alert 서버 전송 실패: " + e);
+    safeLog("서버 전송 실패: " + e);
   }
 }
 
@@ -139,39 +167,40 @@ function describeConfig() {
   return lines.join("\n");
 }
 
-function response(room, msg, sender, isGroupChat, replier, image, packageName) {
-  if (!msg) return;                                  // 이미지 등 빈 내용 제외
+function onMessage(msg) {
+  var content = msg.content;
+  if (!content) return;                                  // 이미지 등 빈 내용 제외
 
   // 채팅방 관리 명령어 (모든 방에서 동작)
-  if (msg === "..새로고침") {
+  if (content === "..새로고침") {
     new java.lang.Thread(function () {
       try {
-        fetchConfig();                               // 즉시 재조회
-        replier.reply("[새로고침 완료] 규칙 " + cfg.rules.length + "개 적용"
+        fetchConfig();                                   // 즉시 재조회
+        msg.reply("[새로고침 완료] 규칙 " + cfg.rules.length + "개 적용"
           + (cfg.rules.length ? "" : " (없음 → 스크립트 기본값)"));
       } catch (e) {
-        Log.error("kakao_alert 새로고침 실패: " + e);
-        replier.reply("[새로고침 실패] " + e);
+        safeLog("새로고침 실패: " + e);
+        msg.reply("[새로고침 실패] " + e);
       }
     }).start();
     return;
   }
-  if (msg === "..설정") {
-    replier.reply(describeConfig());
+  if (content === "..설정") {
+    msg.reply(describeConfig());
     return;
   }
 
   // 방 이름 확인: 이 방에서 입력하면 봇이 받은 방 이름과 규칙 일치 여부를 알려줌
-  if (msg === "..방이름") {
+  if (content === "..방이름") {
     var matched = false;
     for (var i = 0; i < cfg.rules.length; i++) {
       var r = cfg.rules[i];
-      if (r.room === room || (r.room === "" && room === TARGET_ROOM)) { matched = true; break; }
+      if (r.room === msg.room || (r.room === "" && msg.room === TARGET_ROOM)) { matched = true; break; }
     }
     var lines2 = ["[방 이름 확인]",
-      "봇이 받은 방 이름: [" + room + "]",
-      "보낸 사람: [" + sender + "]",
-      "대화 유형: " + (isGroupChat ? "단체방" : "1:1 대화")];
+      "봇이 받은 방 이름: [" + msg.room + "]",
+      "보낸 사람: [" + msg.author.name + "]",
+      "대화 유형: " + (msg.isGroupChat ? "단체방" : "1:1 대화")];
     if (cfg.rules.length) {
       lines2.push("규칙 일치: " + (matched ? "O → 감시 중" : "X → 감시 안함"));
       for (var n = 0; n < cfg.rules.length; n++) {
@@ -180,22 +209,41 @@ function response(room, msg, sender, isGroupChat, replier, image, packageName) {
     } else {
       lines2.push("서버 규칙 없음 → 스크립트 기본값 방: [" + TARGET_ROOM + "]");
     }
-    replier.reply(lines2.join("\n"));
+    msg.reply(lines2.join("\n"));
+    return;
+  }
+  if (content === "..핑") {
+    var pingPayload = {
+      room: String(msg.room),
+      sender: String(msg.author.name),
+      msg: "[핑] 봇 → 서버 연결 테스트 (" + now() + ")",
+      time: now(),
+      keyword: "테스트"
+    };
+    new java.lang.Thread(function () {
+      try {
+        httpPost(API_URL, JSON.stringify(pingPayload));
+        msg.reply("[핑] 전송 완료 → 웹 kakao_alert 페이지에서 확인");
+      } catch (e) {
+        safeLog("핑 실패: " + e);
+        msg.reply("[핑] 서버 전송 실패: " + e);
+      }
+    }).start();
     return;
   }
 
   ensureConfig();                                    // TTL 지났으면 백그라운드 재조회
 
-  var kws = keywordsForRoom(room);                   // 이 방에 적용되는 키워드
+  var kws = keywordsForRoom(msg.room);               // 이 방에 적용되는 키워드
   if (kws.length === 0) return;                      // 감시하지 않는 방이면 무시
 
-  var hits = matchKeywords(msg, kws);
+  var hits = matchKeywords(content, kws);
   if (hits.length === 0) return;                     // 키워드가 하나도 없으면 무시
 
   var payload = {
-    room: String(room),
-    sender: String(sender),
-    msg: String(msg),
+    room: String(msg.room),
+    sender: String(msg.author.name),
+    msg: String(content),
     time: now(),
     keyword: hits.join(", ")                         // 여러 키워드도 한 항목으로 합쳐 저장
   };
@@ -204,6 +252,7 @@ function response(room, msg, sender, isGroupChat, replier, image, packageName) {
   new java.lang.Thread(function () { postToServer(payload); }).start();
 
   if (NOTIFY) {
-    try { replier.reply("[저장됨] 키워드 '" + payload.keyword + "' 감지"); } catch (e) {}
+    try { msg.reply("[저장됨] 키워드 '" + payload.keyword + "' 감지"); } catch (e) {}
   }
 }
+bot.addListener(Event.MESSAGE, onMessage);
