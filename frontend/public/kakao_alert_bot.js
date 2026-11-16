@@ -1,6 +1,7 @@
 // ======================================================================
 //  카카오톡 키워드 감지 → 서버 전송 봇 (메신저봇R API2 방식)
 //  이 파일: https://item.sonfishing.co.kr/kakao_alert_bot.js
+//  버전: v3 (2026-11-17, 채널ID 우선매칭) — ..방이름 / ..설정 답변에 버전이 표시됨
 //
 //  서버 설정: https://item.sonfishing.co.kr/kakao_alert 페이지의 "⚙️ 설정"
 //             (방이름 + 검색키워드 쌍을 여러 개 등록 가능, 최대 10분 내 반영)
@@ -16,6 +17,9 @@
 // ======================================================================
 
 var bot = BotManager.getCurrentBot();
+
+/* ===== 스크립트 버전 (..방이름 / ..설정 답변에 표시) ===== */
+var VERSION = "v3 (2026-11-17, 채널ID 우선매칭)";
 
 /* ============ 로컬 기본값 (서버 설정이 없을 때 사용) ============ */
 var TARGET_ROOM  = "우리방이름";                  // 감시할 채팅방 이름 (정확히 일치)
@@ -181,7 +185,7 @@ function postToServer(payload) {        // 실패해도 앱이 죽지 않도록 
 }
 
 function describeConfig() {
-  var lines = ["[현재 설정]"];
+  var lines = ["[현재 설정] 스크립트: " + VERSION];
   if (cfg.rules.length) {
     for (var i = 0; i < cfg.rules.length; i++) {
       var r = cfg.rules[i];
@@ -228,13 +232,13 @@ function onMessage(msg) {
     var cid = "";
     try { cid = String(msg.channelId); } catch (e) { cid = "(확인불가)"; }
     var m = matchRule(msg.room, msg.channelId);
-    var lines2 = ["[방 이름 확인]",
-      "봇이 받은 방 이름: [" + msg.room + "]",
+    var lines2 = ["[방 이름 확인] 스크립트: " + VERSION,
+      "봇이 받은 방 이름(원본): [" + msg.room + "]",
       "채널ID: [" + cid + "]",
       "보낸 사람: [" + msg.author.name + "]",
       "대화 유형: " + (msg.isGroupChat ? "단체방" : "1:1 대화")];
     if (cfg.rules.length) {
-      lines2.push("규칙 일치: " + (m ? "O → 감시 중 (표시이름: " + m.room + ")" : "X → 감시 안함"));
+      lines2.push("감시 규칙 표시이름: " + (m ? "[" + m.room + "] → O 감시 중" : "X → 감시 안함"));
       for (var n = 0; n < cfg.rules.length; n++) {
         var rr = cfg.rules[n];
         lines2.push("규칙 " + (n + 1) + ": [" + rr.room + "]"
