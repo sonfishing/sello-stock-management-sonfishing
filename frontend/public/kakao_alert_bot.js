@@ -128,16 +128,32 @@ function matchRule(name, channelId) {
   if (!cfg.rules.length) {              // 서버 설정 없음 → 로컬 기본값
     return name === TARGET_ROOM ? { room: TARGET_ROOM, keywords: KEYWORDS } : null;
   }
+
+  // 1차: 채널ID 규칙 우선 — ID로 잡히면 방 이름 문자열 오류와 무관하게 확정이므로
+  //       같은 방에 걸리는 이름 규칙은 무시 (이름이 발신자 이름으로 오는 문제 우회)
+  if (id !== "") {
+    var idHit = false, idLabel = "", idKws = [];
+    for (var a = 0; a < cfg.rules.length; a++) {
+      var ra = cfg.rules[a];
+      if (ra.channelId && ra.channelId === id) {
+        idHit = true;
+        if (!idLabel && ra.room) idLabel = ra.room;
+        idKws = idKws.concat(ra.keywords);
+      }
+    }
+    if (idHit) {
+      if (!idLabel) idLabel = name;
+      return { room: idLabel, keywords: idKws.length ? idKws : KEYWORDS };
+    }
+  }
+
+  // 2차: 채널ID로 안 잡힌 방은 규칙의 방 이름과 봇이 받은 방 이름 일치로 매칭
   var hit = [], label = "", matched = false;
   for (var i = 0; i < cfg.rules.length; i++) {
     var r = cfg.rules[i];
-    var ok = false;
-    if (r.channelId) {                  // 채널ID 규칙: ID로만 매칭
-      ok = (id !== "" && r.channelId === id);
-    } else {                            // 이름 규칙: 방 이름으로만 매칭
-      ok = (r.room === name) || (r.room === "" && name === TARGET_ROOM);
-    }
-    if (ok) {
+    if (r.channelId) continue;         // 채널ID 규칙은 ID가 맞아야만 적용
+    var roomOk = (r.room === name) || (r.room === "" && name === TARGET_ROOM);
+    if (roomOk) {
       matched = true;
       if (!label && r.room) label = r.room;
       hit = hit.concat(r.keywords);
